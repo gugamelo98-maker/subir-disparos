@@ -463,7 +463,9 @@
 /* =========================================================
    CONFIGURAÇÃO — troque pelos dados do seu projeto Supabase
    ========================================================= */
-const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
+const SUPABASE_URL = "https://sfjxgbkvnjfvzbguwwhf.supabase.co";
+// COLE AQUI A CHAVE "anon / public" (Project Settings → API).
+// NUNCA cole a service_role aqui — ela dá acesso total ao banco para qualquer visitante do site.
 const SUPABASE_ANON_KEY = "SUA_ANON_KEY_AQUI";
 const N8N_WEBHOOK_URL = "https://SEU-N8N.dominio.com/webhook/disparo-whatsapp";
 const N8N_WEBHOOK_CRIAR_USUARIO = "https://SEU-N8N.dominio.com/webhook/criar-usuario";
@@ -497,8 +499,15 @@ async function uploadArquivo(bucket, file){
 }
 
 /* ---------- AUTH ---------- */
+function chaveEhServiceRole(){
+  try{
+    const payload = JSON.parse(atob(SUPABASE_ANON_KEY.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return payload.role === 'service_role';
+  }catch(e){ return false; }
+}
+
 function configPendente(){
-  return SUPABASE_URL.includes('SEU-PROJETO') || SUPABASE_ANON_KEY.includes('SUA_ANON_KEY');
+  return SUPABASE_ANON_KEY.includes('SUA_ANON_KEY');
 }
 
 function mostrarAuthMsg(msg, ok){
@@ -522,7 +531,11 @@ function traduzErroAuth(error){
 
 function validarCamposAuth(email, password){
   if(configPendente()){
-    mostrarAuthMsg('O site ainda não foi conectado ao Supabase: troque SUPABASE_URL e SUPABASE_ANON_KEY no topo do index.html.');
+    mostrarAuthMsg('O site ainda não foi conectado ao Supabase: cole a anon key no topo do index.html.');
+    return false;
+  }
+  if(chaveEhServiceRole()){
+    mostrarAuthMsg('PERIGO: a chave colada é a service_role, não a anon. Troque pela chave "anon / public" (Project Settings → API) — a service_role exposta no site dá acesso total ao banco.');
     return false;
   }
   if(!email || !email.includes('@')){ mostrarAuthMsg('Digite um e-mail válido.'); return false; }
@@ -579,9 +592,11 @@ document.getElementById('auth-password').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter') document.getElementById('btn-login').click();
 });
 
-// Aviso imediato se o arquivo ainda não foi configurado
+// Aviso imediato se o arquivo ainda não foi configurado (ou configurado com a chave errada)
 if(configPendente()){
-  mostrarAuthMsg('Atenção: troque SUPABASE_URL e SUPABASE_ANON_KEY no topo do index.html antes de usar.');
+  mostrarAuthMsg('Atenção: cole a anon key no topo do index.html antes de usar.');
+} else if(chaveEhServiceRole()){
+  mostrarAuthMsg('PERIGO: a chave configurada é a service_role. Troque pela anon key e gere uma nova service_role no Supabase, pois essa foi exposta.');
 }
 
 document.getElementById('btn-logout').onclick = async () => {
