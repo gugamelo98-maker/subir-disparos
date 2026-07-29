@@ -638,6 +638,58 @@ document.getElementById('btn-logout').onclick = async () => {
   location.reload();
 };
 
+/* ---------- RASCUNHO PERSISTENTE ----------
+   Mídia, lista, mensagem e link ficavam só na memória da aba: se a página
+   recarregasse, a demanda ia vazia sem aviso. Agora tudo é salvo localmente
+   e restaurado no próximo login. */
+function chaveRascunho(){ return 'demanda_rascunho_' + (currentUser ? currentUser.id : ''); }
+
+function salvarRascunho(){
+  try{
+    localStorage.setItem(chaveRascunho(), JSON.stringify({
+      v1: document.getElementById('input-var1').value,
+      v2: document.getElementById('input-var2').value,
+      v3: document.getElementById('input-var3').value,
+      v4: document.getElementById('input-var4').value,
+      link: document.getElementById('input-link').value,
+      listaNome: document.getElementById('input-lista-nome').value,
+      midiaAtual, listaAtualId,
+      listaResumo: document.getElementById('lista-resumo').textContent
+    }));
+  }catch(e){}
+}
+
+function restaurarRascunho(){
+  try{
+    const r = JSON.parse(localStorage.getItem(chaveRascunho()) || 'null');
+    if(!r) return;
+    document.getElementById('input-var1').value = r.v1 || '';
+    document.getElementById('input-var2').value = r.v2 || '';
+    document.getElementById('input-var3').value = r.v3 || '';
+    document.getElementById('input-var4').value = r.v4 || '';
+    document.getElementById('input-link').value = r.link || '';
+    document.getElementById('input-lista-nome').value = r.listaNome || '';
+    if(r.midiaAtual && r.midiaAtual.url){
+      midiaAtual = r.midiaAtual;
+      const drop = document.getElementById('drop-midia');
+      drop.classList.add('filled');
+      drop.textContent = 'Salvo: ' + (midiaAtual.nomeArquivo || 'mídia');
+      marcarEtapaConcluida(3);
+    }
+    if(r.listaAtualId){
+      listaAtualId = r.listaAtualId;
+      document.getElementById('lista-resumo').textContent = r.listaResumo || 'Lista salva anteriormente';
+      const dropL = document.getElementById('drop-lista');
+      dropL.classList.add('filled');
+      dropL.textContent = 'Lista salva: ' + (r.listaNome || '');
+      marcarEtapaConcluida(6);
+    }
+    if(r.v2) marcarEtapaConcluida(4);
+    if(r.link) marcarEtapaConcluida(5);
+    montarPreview();
+  }catch(e){}
+}
+
 async function registrarAcesso(){
   // grava 1 linha em acessos_log por login (RLS: cada um só insere o próprio)
   try{
@@ -659,6 +711,7 @@ async function bootAfterLogin(novoLogin){
   if(novoLogin) await registrarAcesso();
   await carregarProfile();
   await carregarNumerosTeste();
+  restaurarRascunho();
   mostrarGrupoVinculado();
 }
 
@@ -760,6 +813,7 @@ document.getElementById('save-midia').onclick = async ()=>{
   const tipo = document.getElementById('select-midia-tipo').value;
   const url = await uploadArquivo('midias', file);
   midiaAtual = { url, tipo, nomeArquivo: file.name };
+  salvarRascunho();
   toast('Mídia salva'); marcarEtapaConcluida(3);
 };
 
@@ -776,12 +830,13 @@ function montarPreview(){
     `Para ${escapeHtml(v4)}, use o botão abaixo. ⬇️`;
 }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-['input-var1','input-var2','input-var3','input-var4'].forEach(id=>{
-  document.getElementById(id).addEventListener('input', montarPreview);
+['input-var1','input-var2','input-var3','input-var4','input-link','input-lista-nome'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{ montarPreview(); salvarRascunho(); });
 });
 montarPreview();
 
 document.getElementById('save-mensagem').onclick = ()=>{
+  salvarRascunho();
   toast('Mensagem salva'); marcarEtapaConcluida(4);
 };
 
@@ -789,6 +844,7 @@ document.getElementById('save-mensagem').onclick = ()=>{
 document.getElementById('save-link').onclick = ()=>{
   const link = document.getElementById('input-link').value.trim();
   if(!link){ toast('Informe um link'); return; }
+  salvarRascunho();
   toast('Link salvo'); marcarEtapaConcluida(5);
 };
 
@@ -849,6 +905,7 @@ document.getElementById('save-lista').onclick = async ()=>{
     await supabase.from('contatos').insert(linhas.slice(i, i+500));
   }
   toast('Lista salva com ' + contatosImportados.length + ' contatos'); marcarEtapaConcluida(6);
+  salvarRascunho();
 };
 
 /* ---------- NÚMEROS DE TESTE (etapa 7) ---------- */
@@ -949,6 +1006,20 @@ document.getElementById('btn-enviar-demanda').onclick = async ()=>{
   if(!document.getElementById('input-var2').value){
     toast('Preencha a mensagem na etapa 4'); return;
   }
+
+  // conferência do que vai na demanda — evita envio vazio sem perceber
+  const vai = [], falta = [];
+  (profile.foto_perfil_url ? vai : falta).push('foto de perfil');
+  (document.getElementById('input-var1').value && document.getElementById('input-var2').value ? vai : falta).push('mensagem (variáveis)');
+  (midiaAtual.url ? vai : falta).push('mídia');
+  (document.getElementById('input-link').value.trim() ? vai : falta).push('link');
+  (listaAtualId ? vai : falta).push('lista de contatos');
+  (numerosTeste.length ? vai : falta).push('números de teste');
+  let msg = 'A demanda vai para: ' + (profile.grupo_nome || profile.grupo_id) + '\n\n✔ Incluído: ' + (vai.join(', ') || 'nada');
+  if(falta.length) msg += '\n\n✖ FALTANDO: ' + falta.join(', ') + '\n\nEnviar mesmo assim?';
+  else msg += '\n\nEnviar?';
+  if(!confirm(msg)) return;
+
   const btn = document.getElementById('btn-enviar-demanda');
   btn.disabled = true; btn.textContent = 'Enviando...';
   try{
