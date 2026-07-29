@@ -210,6 +210,7 @@
         <li class="step" data-step="6"><span class="dot">6</span>Lista de contatos</li>
         <li class="step" data-step="7"><span class="dot">7</span>Números de teste</li>
         <li class="step" data-step="8"><span class="dot">8</span>Enviar</li>
+        <li class="step" data-step="admin" id="nav-admin" style="display:none;border-top:1px solid #26332C;margin-top:8px;padding-top:16px;"><span class="dot">★</span>Gerenciar acessos</li>
       </ul>
 
       <div class="rail-foot">
@@ -386,6 +387,72 @@
         </div>
       </section>
 
+      <!-- ADMIN: GERENCIAR ACESSOS -->
+      <section class="panel" data-panel="admin">
+        <div class="eyebrow">Administração</div>
+        <h2>Gerenciar acessos</h2>
+        <p class="desc">Cada conta criada aqui só enxerga os próprios dados — a senha é gerada e mostrada uma única vez, então copie antes de fechar.</p>
+
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Criar novo acesso</h3>
+          <div class="row">
+            <div class="field-block" style="flex:1;">
+              <label>Nome</label>
+              <input type="text" id="admin-nome" placeholder="Nome do cliente">
+            </div>
+            <div class="field-block" style="flex:1;">
+              <label>E-mail</label>
+              <input type="text" id="admin-email" placeholder="cliente@empresa.com">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field-block" style="flex:1;">
+              <label>Senha (deixe em branco para gerar automaticamente)</label>
+              <input type="text" id="admin-senha" placeholder="mínimo 6 caracteres">
+            </div>
+            <div class="field-block" style="flex:1;">
+              <label>DDD</label>
+              <input type="text" id="admin-ddd" maxlength="2" placeholder="48">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field-block" style="flex:1;">
+              <label>Instância Evolution API</label>
+              <input type="text" id="admin-instance" placeholder="instancia-cliente">
+            </div>
+            <div class="field-block" style="flex:1;">
+              <label>URL da Evolution API</label>
+              <input type="text" id="admin-evo-url" placeholder="https://sua-evolution.com">
+            </div>
+          </div>
+          <div class="field-block">
+            <label>API Key da instância</label>
+            <input type="text" id="admin-evo-key" placeholder="apikey">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="admin-criar-usuario">Criar acesso</button>
+          </div>
+          <div id="admin-resultado" class="hint" style="display:none;"></div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Usuários com acesso</h3>
+          <table class="contatos" id="admin-tabela-usuarios">
+            <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Instância</th><th>Admin</th></tr></thead>
+            <tbody id="admin-tabela-usuarios-body"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Últimos acessos</h3>
+          <p class="hint" style="margin-top:-4px;">Cada login no painel gera uma linha aqui.</p>
+          <table class="contatos" id="admin-tabela-acessos">
+            <thead><tr><th>E-mail</th><th>Quando</th><th>Dispositivo</th></tr></thead>
+            <tbody id="admin-tabela-acessos-body"></tbody>
+          </table>
+        </div>
+      </section>
+
     </main>
   </div>
 </div>
@@ -399,6 +466,7 @@
 const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
 const SUPABASE_ANON_KEY = "SUA_ANON_KEY_AQUI";
 const N8N_WEBHOOK_URL = "https://SEU-N8N.dominio.com/webhook/disparo-whatsapp";
+const N8N_WEBHOOK_CRIAR_USUARIO = "https://SEU-N8N.dominio.com/webhook/criar-usuario";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -434,7 +502,7 @@ document.getElementById('btn-login').onclick = async () => {
   const password = document.getElementById('auth-password').value;
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if(error){ document.getElementById('auth-msg').textContent = error.message; return; }
-  await bootAfterLogin();
+  await bootAfterLogin(true);
 };
 
 document.getElementById('btn-signup').onclick = async () => {
@@ -451,13 +519,25 @@ document.getElementById('btn-logout').onclick = async () => {
   location.reload();
 };
 
-async function bootAfterLogin(){
+async function registrarAcesso(){
+  // grava 1 linha em acessos_log por login (RLS: cada um só insere o próprio)
+  try{
+    await supabase.from('acessos_log').insert({
+      user_id: currentUser.id,
+      email: currentUser.email,
+      user_agent: navigator.userAgent.slice(0, 250)
+    });
+  }catch(e){ /* log de acesso nunca deve travar o uso do painel */ }
+}
+
+async function bootAfterLogin(novoLogin){
   const { data: { user } } = await supabase.auth.getUser();
   if(!user) return;
   currentUser = user;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('rail-user-email').textContent = user.email;
+  if(novoLogin) await registrarAcesso();
   await carregarProfile();
   await carregarNumerosTeste();
   atualizarStatusEvo();
@@ -497,6 +577,11 @@ async function carregarProfile(){
       marcarEtapaConcluida(1);
     }
     if(profile.ddd) marcarEtapaConcluida(2);
+    if(profile.is_admin){
+      document.getElementById('nav-admin').style.display = 'block';
+      carregarUsuariosAdmin();
+      carregarAcessosAdmin();
+    }
   }
 }
 
@@ -789,6 +874,90 @@ function validarAntesDeEnviar(){
   }
   return true;
 }
+
+/* ---------- ADMIN: GERENCIAR ACESSOS ---------- */
+async function carregarUsuariosAdmin(){
+  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending:false });
+  if(error){ toast('Erro ao carregar usuários: ' + error.message); return; }
+  const tbody = document.getElementById('admin-tabela-usuarios-body');
+  tbody.innerHTML = (data||[]).map(u => `
+    <tr>
+      <td>${escapeHtml(u.nome || '—')}</td>
+      <td class="mono">${escapeHtml(u.email || '—')}</td>
+      <td>${escapeHtml(u.ddd || '—')}</td>
+      <td>${escapeHtml(u.evolution_instance || '—')}</td>
+      <td>${u.is_admin ? '★ admin' : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+async function carregarAcessosAdmin(){
+  const { data, error } = await supabase.from('acessos_log')
+    .select('*').order('created_at', { ascending:false }).limit(100);
+  if(error){ toast('Erro ao carregar acessos: ' + error.message); return; }
+  const tbody = document.getElementById('admin-tabela-acessos-body');
+  tbody.innerHTML = (data||[]).map(a => `
+    <tr>
+      <td class="mono">${escapeHtml(a.email || '—')}</td>
+      <td>${new Date(a.created_at).toLocaleString('pt-BR')}</td>
+      <td>${escapeHtml(resumoDispositivo(a.user_agent))}</td>
+    </tr>
+  `).join('');
+}
+
+function resumoDispositivo(ua){
+  if(!ua) return '—';
+  if(/Android/i.test(ua)) return 'Android';
+  if(/iPhone|iPad/i.test(ua)) return 'iPhone/iPad';
+  if(/Windows/i.test(ua)) return 'Windows';
+  if(/Mac OS/i.test(ua)) return 'Mac';
+  if(/Linux/i.test(ua)) return 'Linux';
+  return 'Outro';
+}
+
+document.getElementById('admin-criar-usuario').onclick = async ()=>{
+  const email = document.getElementById('admin-email').value.trim();
+  if(!email){ toast('Informe o e-mail do novo acesso'); return; }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ toast('Sessão expirada, faça login novamente'); return; }
+
+  const payload = {
+    nome: document.getElementById('admin-nome').value.trim(),
+    email,
+    senha: document.getElementById('admin-senha').value.trim(),
+    ddd: document.getElementById('admin-ddd').value.trim(),
+    evolution_instance: document.getElementById('admin-instance').value.trim(),
+    evolution_api_url: document.getElementById('admin-evo-url').value.trim(),
+    evolution_api_key: document.getElementById('admin-evo-key').value.trim()
+  };
+
+  const btn = document.getElementById('admin-criar-usuario');
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try{
+    const resp = await fetch(N8N_WEBHOOK_CRIAR_USUARIO, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    const resultado = document.getElementById('admin-resultado');
+    resultado.style.display = 'block';
+    if(!resp.ok){
+      resultado.style.color = 'var(--red)';
+      resultado.textContent = data.erro || 'Erro ao criar acesso.';
+    } else {
+      resultado.style.color = 'var(--jade-dark)';
+      resultado.textContent = `Acesso criado! E-mail: ${data.email} — Senha: ${data.senha_temporaria} (copie agora, não fica salva em nenhum lugar visível depois)`;
+      ['admin-nome','admin-email','admin-senha','admin-ddd','admin-instance','admin-evo-url','admin-evo-key'].forEach(id=>document.getElementById(id).value='');
+      carregarUsuariosAdmin();
+    }
+  }catch(e){
+    toast('Não foi possível chamar o webhook: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Criar acesso';
+  }
+};
 </script>
 </body>
 </html>
