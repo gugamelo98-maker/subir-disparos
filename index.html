@@ -1001,6 +1001,63 @@ async function garantirCampanha(){
   return campaignAtualId;
 }
 
+function irParaEtapa(n){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  const step = document.querySelector(`.step[data-step="${n}"]`);
+  const panel = document.querySelector(`.panel[data-panel="${n}"]`);
+  if(step) step.classList.add('active');
+  if(panel) panel.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function novaDemanda(){
+  // limpa tudo que é da DEMANDA; mantém o que é da CONTA (foto, nome, DDD, grupo)
+  ['input-var1','input-var2','input-var3','input-var4','input-link','input-lista-nome'].forEach(id=>{
+    document.getElementById(id).value = '';
+  });
+  montarPreview();
+
+  // mídia
+  midiaAtual = { url:null, tipo:'image', nomeArquivo:null };
+  document.getElementById('input-midia').value = '';
+  const dropM = document.getElementById('drop-midia');
+  dropM.classList.remove('filled');
+  dropM.textContent = 'Clique para enviar o arquivo da campanha';
+  ['midia-preview-img','midia-preview-video','midia-preview-doc'].forEach(id=>document.getElementById(id).style.display='none');
+
+  // lista
+  listaAtualId = null; contatosImportados = [];
+  document.getElementById('input-lista').value = '';
+  const dropL = document.getElementById('drop-lista');
+  dropL.classList.remove('filled');
+  dropL.textContent = 'Clique para enviar o arquivo (.csv, .xlsx)';
+  document.getElementById('lista-resumo').textContent = '';
+  document.getElementById('tabela-contatos').style.display = 'none';
+  document.getElementById('tabela-contatos-body').innerHTML = '';
+
+  // números de teste (cada demanda tem os seus)
+  try{
+    await supabase.from('numeros_teste').delete().eq('user_id', currentUser.id);
+  }catch(e){}
+  numerosTeste = []; renderNumerosTeste();
+  document.getElementById('input-teste-numero').value = '';
+
+  // log, campanha e rascunho
+  campaignAtualId = null;
+  if(logPollTimer) clearInterval(logPollTimer);
+  document.getElementById('envio-log').innerHTML = '';
+  try{ localStorage.removeItem(chaveRascunho()); }catch(e){}
+
+  // desmarca as etapas da demanda (1 e 2 são da conta, continuam)
+  [3,4,5,6,7,8].forEach(n=>{
+    const el = document.querySelector(`.step[data-step="${n}"]`);
+    if(el) el.classList.remove('done');
+  });
+
+  irParaEtapa(3);
+}
+
 document.getElementById('btn-enviar-demanda').onclick = async ()=>{
   if(!profile.grupo_id){ toast('Nenhum grupo vinculado ao seu acesso'); return; }
   if(!document.getElementById('input-var2').value){
@@ -1026,9 +1083,10 @@ document.getElementById('btn-enviar-demanda').onclick = async ()=>{
     campaignAtualId = null; // cada envio gera um registro novo
     const id = await garantirCampanha();
     if(!id) return;
-    iniciarAcompanhamentoLog();
     await chamarN8n('enviar-demanda', { campaign_id: id });
-    toast('Demanda enviada para o grupo — acompanhe o log abaixo');
+    // o n8n só responde depois que todos os itens foram enviados ao grupo
+    await novaDemanda();
+    toast('Demanda enviada! Pode começar a próxima.');
   }catch(e){
     toast('Não foi possível enviar: ' + e.message);
   }finally{
