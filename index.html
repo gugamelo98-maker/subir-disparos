@@ -497,22 +497,92 @@ async function uploadArquivo(bucket, file){
 }
 
 /* ---------- AUTH ---------- */
+function configPendente(){
+  return SUPABASE_URL.includes('SEU-PROJETO') || SUPABASE_ANON_KEY.includes('SUA_ANON_KEY');
+}
+
+function mostrarAuthMsg(msg, ok){
+  const el = document.getElementById('auth-msg');
+  el.style.color = ok ? '#17A673' : '#E8A33D';
+  el.textContent = msg;
+}
+
+function traduzErroAuth(error){
+  const m = (error && error.message) || '';
+  if(m.includes('Failed to fetch')) return 'Não foi possível conectar ao Supabase. Confira a URL e a anon key no topo do index.html, e sua conexão com a internet.';
+  if(m.includes('Invalid login credentials')) return 'E-mail ou senha incorretos.';
+  if(m.includes('Email not confirmed')) return 'E-mail ainda não confirmado. Abra o link enviado para sua caixa de entrada (veja o spam) ou desative "Confirm email" no Supabase em Authentication → Sign In / Providers.';
+  if(m.includes('User already registered')) return 'Este e-mail já tem uma conta. Use o botão "Entrar".';
+  if(m.includes('Password should be at least')) return 'A senha precisa ter no mínimo 6 caracteres.';
+  if(m.includes('Signups not allowed') || m.includes('signup is disabled')) return 'O cadastro está desativado no Supabase. Ative em Authentication → Sign In / Providers → Email, ou crie o acesso pelo painel de admin.';
+  if(m.includes('rate limit') || m.includes('Too many')) return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+  if(m.toLowerCase().includes('anonymous') || m.includes('Invalid API key')) return 'A anon key parece inválida. Copie de novo em Project Settings → API no Supabase.';
+  return m || 'Erro desconhecido.';
+}
+
+function validarCamposAuth(email, password){
+  if(configPendente()){
+    mostrarAuthMsg('O site ainda não foi conectado ao Supabase: troque SUPABASE_URL e SUPABASE_ANON_KEY no topo do index.html.');
+    return false;
+  }
+  if(!email || !email.includes('@')){ mostrarAuthMsg('Digite um e-mail válido.'); return false; }
+  if(!password || password.length < 6){ mostrarAuthMsg('A senha precisa ter no mínimo 6 caracteres.'); return false; }
+  return true;
+}
+
 document.getElementById('btn-login').onclick = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if(error){ document.getElementById('auth-msg').textContent = error.message; return; }
-  await bootAfterLogin(true);
+  if(!validarCamposAuth(email, password)) return;
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try{
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error){ mostrarAuthMsg(traduzErroAuth(error)); return; }
+    await bootAfterLogin(true);
+  }catch(e){
+    mostrarAuthMsg(traduzErroAuth(e));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
 };
 
 document.getElementById('btn-signup').onclick = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
-  const { error } = await supabase.auth.signUp({ email, password });
-  if(error){ document.getElementById('auth-msg').textContent = error.message; return; }
-  document.getElementById('auth-msg').style.color = '#17A673';
-  document.getElementById('auth-msg').textContent = 'Conta criada! Verifique seu e-mail se a confirmação estiver ativada, depois faça login.';
+  if(!validarCamposAuth(email, password)) return;
+  const btn = document.getElementById('btn-signup');
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try{
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if(error){ mostrarAuthMsg(traduzErroAuth(error)); return; }
+    // Se "Confirm email" estiver DESLIGADO no Supabase, já vem uma sessão: entra direto.
+    if(data && data.session){
+      await bootAfterLogin(true);
+      return;
+    }
+    // Se identities vier vazio, o e-mail já existia (o Supabase não avisa por segurança).
+    if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0){
+      mostrarAuthMsg('Este e-mail já tem uma conta. Use o botão "Entrar" (ou recupere a senha).');
+      return;
+    }
+    mostrarAuthMsg('Conta criada! Enviamos um link de confirmação para o seu e-mail — abra-o (veja o spam) e depois faça login aqui.', true);
+  }catch(e){
+    mostrarAuthMsg(traduzErroAuth(e));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Criar conta';
+  }
 };
+
+// Enter no campo de senha = tentar entrar
+document.getElementById('auth-password').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('btn-login').click();
+});
+
+// Aviso imediato se o arquivo ainda não foi configurado
+if(configPendente()){
+  mostrarAuthMsg('Atenção: troque SUPABASE_URL e SUPABASE_ANON_KEY no topo do index.html antes de usar.');
+}
 
 document.getElementById('btn-logout').onclick = async () => {
   await supabase.auth.signOut();
