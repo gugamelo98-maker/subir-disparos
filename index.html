@@ -1012,7 +1012,26 @@ function irParaEtapa(n){
 }
 
 async function novaDemanda(){
-  // limpa tudo que é da DEMANDA; mantém o que é da CONTA (foto, nome, DDD, grupo)
+  // limpa TUDO da demanda, incluindo foto de perfil, nome e DDD
+  // (mantém só a conta em si e o grupo vinculado pelo admin)
+
+  // foto de perfil + nome + ddd (banco e tela)
+  try{
+    await supabase.from('profiles')
+      .update({ foto_perfil_url: null, nome: null, ddd: null })
+      .eq('id', currentUser.id);
+  }catch(e){}
+  profile.foto_perfil_url = null; profile.nome = null; profile.ddd = null;
+  document.getElementById('input-nome-perfil').value = '';
+  document.getElementById('input-ddd').value = '';
+  document.getElementById('input-avatar').value = '';
+  const avatarImg = document.getElementById('avatar-preview');
+  avatarImg.style.display = 'none'; avatarImg.src = '';
+  const dropA = document.getElementById('drop-avatar');
+  dropA.classList.remove('filled');
+  dropA.textContent = 'Clique para enviar uma imagem (JPG ou PNG)';
+
+  // mensagem, link e lista (campos)
   ['input-var1','input-var2','input-var3','input-var4','input-link','input-lista-nome'].forEach(id=>{
     document.getElementById(id).value = '';
   });
@@ -1049,13 +1068,13 @@ async function novaDemanda(){
   document.getElementById('envio-log').innerHTML = '';
   try{ localStorage.removeItem(chaveRascunho()); }catch(e){}
 
-  // desmarca as etapas da demanda (1 e 2 são da conta, continuam)
-  [3,4,5,6,7,8].forEach(n=>{
+  // desmarca todas as etapas e volta pro início
+  [1,2,3,4,5,6,7,8].forEach(n=>{
     const el = document.querySelector(`.step[data-step="${n}"]`);
     if(el) el.classList.remove('done');
   });
 
-  irParaEtapa(3);
+  irParaEtapa(1);
 }
 
 document.getElementById('btn-enviar-demanda').onclick = async ()=>{
