@@ -1,255 +1,1062 @@
--- =========================================================
--- SCHEMA: Painel de Demandas WhatsApp (Evolution API central)
--- PODE RODAR ESTE ARQUIVO INTEIRO QUANTAS VEZES QUISER:
--- ele cria o que falta e completa tabelas antigas sem apagar dados.
--- =========================================================
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Disparos · WhatsApp</title>
 
--- ---------- PROFILES (1 linha por usuário) ----------
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  created_at timestamptz default now()
-);
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 
--- completa colunas que podem faltar em versões antigas da tabela
-alter table public.profiles add column if not exists email text;
-alter table public.profiles add column if not exists nome text;
-alter table public.profiles add column if not exists ddd text;
-alter table public.profiles add column if not exists foto_perfil_url text;
-alter table public.profiles add column if not exists is_admin boolean not null default false;
--- (colunas antigas de evolution_* podem existir; não atrapalham e não são mais usadas)
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
--- garante que TODO usuário do Auth tenha profile, e preenche e-mails vazios
-insert into public.profiles (id, email)
-  select u.id, u.email from auth.users u
-  on conflict (id) do nothing;
+<style>
+  :root{
+    --ink:#0E1512;
+    --ink-2:#16201C;
+    --paper:#F7F5F0;
+    --paper-2:#FFFFFF;
+    --line:#DCD8CC;
+    --jade:#17A673;
+    --jade-dark:#0E7C56;
+    --amber:#E8A33D;
+    --red:#D6564A;
+    --text:#1B211E;
+    --text-soft:#5B6560;
+    --text-inv:#EFF3F0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',sans-serif;background:var(--paper);color:var(--text);}
+  h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
 
-update public.profiles p
-  set email = u.email
-  from auth.users u
-  where u.id = p.id and (p.email is null or p.email = '');
+  /* ---------- AUTH ---------- */
+  #auth-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(23,166,115,0.12), transparent 40%),
+      var(--ink);
+  }
+  .auth-card{
+    width:380px;background:var(--ink-2);border:1px solid #24312B;border-radius:14px;
+    padding:36px 32px;color:var(--text-inv);
+  }
+  .auth-card h1{font-size:22px;margin:0 0 4px;}
+  .auth-card p.sub{color:#8FA098;font-size:13px;margin:0 0 24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:#8FA098;margin-bottom:6px;letter-spacing:.02em;}
+  .field input{
+    width:100%;padding:10px 12px;border-radius:8px;border:1px solid #2C3B34;
+    background:#0E1512;color:var(--text-inv);font-size:14px;
+  }
+  .field input:focus{outline:2px solid var(--jade);outline-offset:1px;}
+  .btn-primary{
+    width:100%;padding:11px;border:none;border-radius:8px;background:var(--jade);
+    color:#06231A;font-weight:600;font-size:14px;margin-top:6px;
+  }
+  .btn-primary:hover{background:#1EC38B;}
+  .btn-link{background:none;border:none;color:#8FA098;font-size:13px;text-decoration:underline;padding:0;margin-top:14px;}
+  #auth-msg{font-size:13px;margin-top:12px;color:var(--amber);min-height:16px;}
 
--- >>> ADMIN: promove este e-mail (troque aqui se mudar o admin) <<<
-update public.profiles set is_admin = true where email = 'gugamelo98@gmail.com';
+  /* ---------- APP SHELL ---------- */
+  #app{display:none;min-height:100vh;}
+  .shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh;}
+  .rail{background:var(--ink);color:var(--text-inv);padding:24px 18px;position:relative;}
+  .rail-brand{font-size:15px;font-weight:600;letter-spacing:.02em;margin-bottom:4px;}
+  .rail-brand span{color:var(--jade);}
+  .rail-user{font-size:12px;color:#8FA098;margin-bottom:28px;word-break:break-all;}
 
-alter table public.profiles enable row level security;
+  .steps{list-style:none;margin:0;padding:0;position:relative;}
+  .steps::before{
+    content:"";position:absolute;left:13px;top:6px;bottom:6px;width:1px;background:#26332C;
+  }
+  .step{position:relative;padding:10px 0 10px 34px;cursor:pointer;font-size:13.5px;color:#9BAAA2;border-radius:8px;}
+  .step:hover{color:var(--text-inv);}
+  .step .dot{
+    position:absolute;left:6px;top:12px;width:15px;height:15px;border-radius:50%;
+    background:var(--ink-2);border:1.5px solid #33453C;font-family:'IBM Plex Mono',monospace;
+    font-size:9px;display:flex;align-items:center;justify-content:center;color:#8FA098;
+  }
+  .step.active{color:var(--text-inv);font-weight:600;}
+  .step.active .dot{background:var(--jade);border-color:var(--jade);color:#06231A;}
+  .step.done .dot{background:#1B2620;border-color:var(--jade);color:var(--jade);}
+  .step.done .dot::after{content:"✓";}
 
--- Função auxiliar: o usuário logado é admin?
--- SECURITY DEFINER é obrigatório: policy de profiles consultando profiles
--- diretamente causa recursão infinita de RLS no Postgres.
-create or replace function public.is_admin()
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select coalesce(
-    (select p.is_admin from public.profiles p where p.id = auth.uid()),
-    false
-  );
-$$;
+  .rail-foot{position:absolute;bottom:22px;left:18px;right:18px;}
+  .status-pill{
+    display:flex;align-items:center;gap:6px;font-size:11.5px;color:#8FA098;padding:8px 10px;
+    border:1px solid #26332C;border-radius:8px;margin-bottom:10px;
+  }
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);}
+  .status-dot.ok{background:var(--jade);}
+  .btn-logout{width:100%;background:none;border:1px solid #26332C;color:#8FA098;padding:8px;border-radius:8px;font-size:12.5px;}
+  .btn-logout:hover{color:var(--text-inv);border-color:#3A4A41;}
 
-drop policy if exists "profiles_select_own" on public.profiles;
-drop policy if exists "profiles_insert_own" on public.profiles;
-drop policy if exists "profiles_update_own" on public.profiles;
-drop policy if exists "profiles_admin_select_all" on public.profiles;
-drop policy if exists "profiles_admin_update_all" on public.profiles;
+  .main{padding:36px 44px;max-width:760px;}
+  .panel{display:none;}
+  .panel.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
 
-create policy "profiles_select_own" on public.profiles
-  for select using (auth.uid() = id or public.is_admin());
-create policy "profiles_insert_own" on public.profiles
-  for insert with check (auth.uid() = id);
-create policy "profiles_update_own" on public.profiles
-  for update using (auth.uid() = id or public.is_admin());
+  .eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--jade);font-weight:600;margin-bottom:6px;}
+  .panel h2{font-size:24px;margin:0 0 6px;}
+  .panel .desc{color:var(--text-soft);font-size:14px;margin:0 0 26px;max-width:520px;}
 
--- cria o profile automaticamente quando um novo usuário se cadastra
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, email) values (new.id, new.email)
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
+  .card{background:var(--paper-2);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:16px;}
+  .row{display:flex;gap:14px;}
+  .field-block{margin-bottom:16px;}
+  .field-block label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--text);}
+  .field-block .hint{font-size:12px;color:var(--text-soft);margin-top:5px;}
+  .field-block input[type=text],.field-block input[type=tel],.field-block textarea,.field-block select{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--paper-2);
+  }
+  .field-block textarea{resize:vertical;min-height:70px;}
+  .field-block input:focus,.field-block textarea:focus,.field-block select:focus{outline:2px solid var(--jade);outline-offset:1px;border-color:var(--jade);}
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  .dropzone{
+    border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;cursor:pointer;
+    font-size:13px;color:var(--text-soft);background:#FAFAF7;
+  }
+  .dropzone:hover{border-color:var(--jade);color:var(--jade-dark);}
+  .dropzone.filled{border-style:solid;border-color:var(--jade);color:var(--jade-dark);background:#EEFAF5;}
+  .preview-img{max-width:100%;max-height:220px;border-radius:8px;margin-top:12px;}
+  .avatar-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--jade);margin-top:10px;}
 
--- Impede que usuário comum se autopromova a admin editando o próprio perfil
-create or replace function public.protect_is_admin()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if NEW.is_admin is distinct from OLD.is_admin then
-    if not public.is_admin() then
-      NEW.is_admin := OLD.is_admin;
-    end if;
-  end if;
-  return NEW;
-end;
-$$;
+  .btn{padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--paper-2);font-size:13.5px;font-weight:600;color:var(--text);}
+  .btn:hover{border-color:var(--jade);}
+  .btn-solid{background:var(--jade);border-color:var(--jade);color:#06231A;}
+  .btn-solid:hover{background:#1EC38B;}
+  .btn-solid:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-row{display:flex;gap:10px;margin-top:20px;}
 
-drop trigger if exists before_profiles_update_protect_admin on public.profiles;
-create trigger before_profiles_update_protect_admin
-  before update on public.profiles
-  for each row execute procedure public.protect_is_admin();
+  .template-preview{
+    background:#0E1512;color:#EAF3EE;border-radius:10px;padding:16px 18px;font-size:13.5px;line-height:1.6;
+    white-space:pre-wrap;
+  }
+  .template-preview .tag{color:var(--jade);}
 
--- Obs.: SENHA não existe em nenhuma tabela sua de propósito.
--- O Supabase Auth guarda apenas o hash dela em auth.users — nunca dá
--- para ler a senha de um usuário, só resetar.
+  table.contatos{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px;}
+  table.contatos th{text-align:left;color:var(--text-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);}
+  table.contatos td{padding:6px 8px;border-bottom:1px solid #EEECE4;}
 
--- =========================================================
--- LOG DE ACESSOS (cada login no painel grava 1 linha)
--- =========================================================
-create table if not exists public.acessos_log (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  email text,
-  user_agent text,
-  created_at timestamptz default now()
-);
+  .chip-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .chip{background:#EEFAF5;color:var(--jade-dark);border:1px solid #C9EEDD;border-radius:999px;padding:5px 12px;font-size:12.5px;display:flex;align-items:center;gap:6px;}
+  .chip button{background:none;border:none;color:var(--jade-dark);font-size:14px;line-height:1;padding:0;}
 
-alter table public.acessos_log enable row level security;
+  .log{max-height:220px;overflow:auto;font-size:12.5px;margin-top:14px;}
+  .log-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #EEECE4;}
+  .log-row.erro{color:var(--red);}
+  .log-row.enviado{color:var(--jade-dark);}
 
-drop policy if exists "acessos_insert_own" on public.acessos_log;
-drop policy if exists "acessos_select_own_or_admin" on public.acessos_log;
+  .toast{
+    position:fixed;bottom:24px;right:24px;background:var(--ink);color:var(--text-inv);
+    padding:12px 18px;border-radius:9px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);
+    display:none;z-index:50;
+  }
+  .toast.show{display:block;animation:fade .2s ease;}
 
-create policy "acessos_insert_own" on public.acessos_log
-  for insert with check (auth.uid() = user_id);
-create policy "acessos_select_own_or_admin" on public.acessos_log
-  for select using (auth.uid() = user_id or public.is_admin());
+  @media(max-width:820px){
+    .shell{grid-template-columns:1fr;}
+    .rail{position:sticky;top:0;z-index:10;padding:16px;}
+    .steps::before{display:none;}
+    .steps{display:flex;overflow-x:auto;gap:6px;}
+    .step{padding:8px 12px;white-space:nowrap;}
+    .step .dot{position:static;margin-right:6px;display:inline-flex;}
+    .rail-foot{position:static;margin-top:14px;}
+    .main{padding:24px 20px;}
+  }
+</style>
+</head>
+<body>
 
-create index if not exists idx_acessos_user on public.acessos_log(user_id, created_at desc);
+<!-- ================= AUTH SCREEN ================= -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1>Painel de Disparos</h1>
+    <p class="sub">Acesso privado — cada conta só vê os próprios dados.</p>
 
--- =========================================================
--- LISTAS DE CONTATOS
--- =========================================================
-create table if not exists public.listas (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  nome text not null,
-  created_at timestamptz default now()
-);
-alter table public.listas add column if not exists arquivo_url text;
-alter table public.listas add column if not exists total_contatos int default 0;
+    <div class="field">
+      <label>E-mail</label>
+      <input type="text" id="auth-email" placeholder="voce@empresa.com" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
 
-alter table public.listas enable row level security;
-drop policy if exists "listas_all_own" on public.listas;
-create policy "listas_all_own" on public.listas
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+    <button class="btn-primary" id="btn-login">Entrar</button>
+    <button class="btn-primary" id="btn-signup" style="background:transparent;border:1px solid #2C3B34;color:#EFF3F0;margin-top:8px;">Criar conta</button>
+    <div id="auth-msg"></div>
+  </div>
+</div>
 
--- ---------- CONTATOS ----------
-create table if not exists public.contatos (
-  id uuid primary key default gen_random_uuid(),
-  lista_id uuid references public.listas(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  nome text,
-  telefone text not null,
-  created_at timestamptz default now()
-);
+<!-- ================= APP ================= -->
+<div id="app">
+  <div class="shell">
 
-alter table public.contatos enable row level security;
-drop policy if exists "contatos_all_own" on public.contatos;
-create policy "contatos_all_own" on public.contatos
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+    <!-- RAIL -->
+    <nav class="rail">
+      <div class="rail-brand">Disparos<span>.</span></div>
+      <div class="rail-user" id="rail-user-email">—</div>
 
-create index if not exists idx_contatos_lista on public.contatos(lista_id);
+      <ul class="steps" id="steps-nav">
+        <li class="step active" data-step="1"><span class="dot">1</span>Foto de perfil</li>
+        <li class="step" data-step="2"><span class="dot">2</span>DDD</li>
+        <li class="step" data-step="3"><span class="dot">3</span>Vídeo ou imagem</li>
+        <li class="step" data-step="4"><span class="dot">4</span>Mensagem</li>
+        <li class="step" data-step="5"><span class="dot">5</span>Link de redirecionamento</li>
+        <li class="step" data-step="6"><span class="dot">6</span>Lista de contatos</li>
+        <li class="step" data-step="7"><span class="dot">7</span>Números de teste</li>
+        <li class="step" data-step="8"><span class="dot">8</span>Enviar</li>
+        <li class="step" data-step="admin" id="nav-admin" style="display:none;border-top:1px solid #26332C;margin-top:8px;padding-top:16px;"><span class="dot">★</span>Gerenciar acessos</li>
+      </ul>
 
--- ---------- NÚMEROS DE TESTE ----------
-create table if not exists public.numeros_teste (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  telefone text not null,
-  created_at timestamptz default now()
-);
+      <div class="rail-foot">
+        <button class="btn-logout" id="btn-logout">Sair da conta</button>
+      </div>
+    </nav>
 
-alter table public.numeros_teste enable row level security;
-drop policy if exists "numeros_teste_all_own" on public.numeros_teste;
-create policy "numeros_teste_all_own" on public.numeros_teste
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+    <!-- MAIN -->
+    <main class="main">
 
--- =========================================================
--- CAMPANHAS / DEMANDAS (template + mídia + link + grupo)
--- =========================================================
-create table if not exists public.campaigns (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  nome text not null,
-  created_at timestamptz default now()
-);
-alter table public.campaigns add column if not exists midia_url text;
-alter table public.campaigns add column if not exists midia_tipo text;            -- image | video | document
-alter table public.campaigns add column if not exists midia_nome_arquivo text;
-alter table public.campaigns add column if not exists var1_nome text;             -- {{1}}
-alter table public.campaigns add column if not exists var2_novidade text;         -- {{2}}
-alter table public.campaigns add column if not exists var3_texto text;            -- {{3}}
-alter table public.campaigns add column if not exists var4_cta text;              -- {{4}}
-alter table public.campaigns add column if not exists link_redirecionamento text;
-alter table public.campaigns add column if not exists lista_id uuid references public.listas(id);
-alter table public.campaigns add column if not exists grupo_id text;              -- JID do grupo (1203...@g.us)
-alter table public.campaigns add column if not exists grupo_nome text;
-alter table public.campaigns add column if not exists status text default 'rascunho';
+      <!-- STEP 1: FOTO DE PERFIL -->
+      <section class="panel active" data-panel="1">
+        <div class="eyebrow">Etapa 1</div>
+        <h2>Foto de perfil</h2>
+        <p class="desc">Essa é a foto que aparece na instância conectada à Evolution API.</p>
+        <div class="card">
+          <div class="dropzone" id="drop-avatar">Clique para enviar uma imagem (JPG ou PNG)</div>
+          <input type="file" id="input-avatar" accept="image/*" style="display:none">
+          <img id="avatar-preview" class="avatar-preview" style="display:none">
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-avatar">Salvar foto</button>
+          </div>
+        </div>
+      </section>
 
-alter table public.campaigns enable row level security;
-drop policy if exists "campaigns_all_own" on public.campaigns;
-create policy "campaigns_all_own" on public.campaigns
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+      <!-- STEP 2: DDD -->
+      <section class="panel" data-panel="2">
+        <div class="eyebrow">Etapa 2</div>
+        <h2>Perfil e DDD</h2>
+        <p class="desc">O nome que aparece no perfil do WhatsApp e o DDD dos números.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Nome do perfil</label>
+            <input type="text" id="input-nome-perfil" placeholder="ex: Loja da Maria">
+          </div>
+          <div class="field-block">
+            <label>DDD (ex: 48)</label>
+            <input type="text" id="input-ddd" maxlength="2" placeholder="48">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-ddd">Salvar</button>
+          </div>
+        </div>
+      </section>
 
--- ---------- LOG DE ENVIOS ----------
-create table if not exists public.envios_log (
-  id uuid primary key default gen_random_uuid(),
-  campaign_id uuid references public.campaigns(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  telefone text,
-  status text,      -- enviado | erro
-  detalhe text,
-  created_at timestamptz default now()
-);
+      <!-- STEP 3: VIDEO OU IMAGEM -->
+      <section class="panel" data-panel="3">
+        <div class="eyebrow">Etapa 3</div>
+        <h2>Vídeo ou imagem da campanha</h2>
+        <p class="desc">Mídia enviada junto com a mensagem. Também aceita arquivos ZIP ou Excel como documento anexo.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Tipo de mídia</label>
+            <select id="select-midia-tipo">
+              <option value="image">Imagem</option>
+              <option value="video">Vídeo</option>
+              <option value="document">Documento (ZIP, XLSX, PDF...)</option>
+            </select>
+          </div>
+          <div class="dropzone" id="drop-midia">Clique para enviar o arquivo da campanha</div>
+          <input type="file" id="input-midia" accept="image/*,video/*,.zip,.xlsx,.xls,.pdf" style="display:none">
+          <img id="midia-preview-img" class="preview-img" style="display:none">
+          <video id="midia-preview-video" class="preview-img" controls style="display:none"></video>
+          <div id="midia-preview-doc" class="hint" style="display:none;margin-top:10px;"></div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-midia">Salvar mídia</button>
+          </div>
+        </div>
+      </section>
 
-alter table public.envios_log enable row level security;
-drop policy if exists "envios_log_all_own" on public.envios_log;
-create policy "envios_log_all_own" on public.envios_log
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+      <!-- STEP 4: MENSAGEM -->
+      <section class="panel" data-panel="4">
+        <div class="eyebrow">Etapa 4</div>
+        <h2>Mensagem</h2>
+        <p class="desc">Preencha as 4 variáveis do modelo.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>{{1}} — nome/saudação</label>
+            <input type="text" id="input-var1" placeholder="ex: cliente especial">
+          </div>
+          <div class="field-block">
+            <label>{{2}} — a novidade</label>
+            <input type="text" id="input-var2" placeholder="ex: chegou a nova coleção">
+          </div>
+          <div class="field-block">
+            <label>{{3}} — texto livre</label>
+            <textarea id="input-var3" placeholder="ex: Peças exclusivas com até 30% off só essa semana."></textarea>
+          </div>
+          <div class="field-block">
+            <label>{{4}} — chamada para ação (o que a pessoa vai fazer)</label>
+            <input type="text" id="input-var4" placeholder="ex: garantir o seu desconto">
+          </div>
+          <div class="field-block">
+            <label>Pré-visualização</label>
+            <div class="template-preview" id="template-preview"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-mensagem">Salvar mensagem</button>
+          </div>
+        </div>
+      </section>
 
--- =========================================================
--- STORAGE (Buckets)
--- =========================================================
-insert into storage.buckets (id, name, public)
-  values ('perfil', 'perfil', false)
-  on conflict (id) do nothing;
+      <!-- STEP 5: LINK -->
+      <section class="panel" data-panel="5">
+        <div class="eyebrow">Etapa 5</div>
+        <h2>Link de redirecionamento</h2>
+        <p class="desc">Aparece no botão/rodapé da mensagem enviada.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>URL de destino</label>
+            <input type="text" id="input-link" placeholder="https://seusite.com/oferta">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-link">Salvar link</button>
+          </div>
+        </div>
+      </section>
 
-insert into storage.buckets (id, name, public)
-  values ('midias', 'midias', false)
-  on conflict (id) do nothing;
+      <!-- STEP 6: LISTA DE CONTATOS -->
+      <section class="panel" data-panel="6">
+        <div class="eyebrow">Etapa 6</div>
+        <h2>Lista de contatos</h2>
+        <p class="desc">Envie um CSV ou Excel com as colunas <span class="mono">nome</span> e <span class="mono">telefone</span>.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Nome da lista</label>
+            <input type="text" id="input-lista-nome" placeholder="ex: clientes-julho">
+          </div>
+          <div class="dropzone" id="drop-lista">Clique para enviar o arquivo (.csv, .xlsx)</div>
+          <input type="file" id="input-lista" accept=".csv,.xlsx,.xls" style="display:none">
+          <div id="lista-resumo" class="hint"></div>
+          <table class="contatos" id="tabela-contatos" style="display:none;">
+            <thead><tr><th>Nome</th><th>Telefone</th></tr></thead>
+            <tbody id="tabela-contatos-body"></tbody>
+          </table>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-lista">Salvar lista</button>
+          </div>
+        </div>
+      </section>
 
-insert into storage.buckets (id, name, public)
-  values ('arquivos', 'arquivos', false)
-  on conflict (id) do nothing;
+      <!-- STEP 7: NÚMEROS DE TESTE -->
+      <section class="panel" data-panel="7">
+        <div class="eyebrow">Etapa 7</div>
+        <h2>Números de teste</h2>
+        <p class="desc">Use para validar a mensagem antes do disparo em massa.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Número (com DDD)</label>
+            <input type="tel" id="input-teste-numero" placeholder="48999999999">
+          </div>
+          <button class="btn" id="add-teste-numero">Adicionar número</button>
+          <div class="chip-list" id="lista-teste-numeros"></div>
+        </div>
+      </section>
 
--- Cada usuário só acessa arquivos dentro da pasta com o próprio UID:
--- convenção usada no index.html: <bucket>/<user_id>/<arquivo>
+      <!-- STEP 8: ENVIAR -->
+      <section class="panel" data-panel="8">
+        <div class="eyebrow">Etapa 8</div>
+        <h2>Enviar para o grupo</h2>
+        <p class="desc">Escolha o seu grupo de WhatsApp — a demanda completa (perfil, DDD, mídia, mensagem, link, lista e números de teste) será enviada nele.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Grupo de WhatsApp</label>
+            <div class="row">
+              <select id="select-grupo" style="flex:1;">
+                <option value="">Carregando grupos...</option>
+              </select>
+              <button class="btn" id="btn-recarregar-grupos" title="Recarregar grupos">↻</button>
+            </div>
+            <div class="hint">Não achou o grupo? O número conectado à Evolution API precisa estar dentro dele.</div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="btn-enviar-demanda">Enviar demanda para o grupo</button>
+          </div>
+          <div class="log" id="envio-log"></div>
+        </div>
+      </section>
 
-drop policy if exists "perfil_own_rw" on storage.objects;
-drop policy if exists "midias_own_rw" on storage.objects;
-drop policy if exists "arquivos_own_rw" on storage.objects;
+      <!-- ADMIN: GERENCIAR ACESSOS -->
+      <section class="panel" data-panel="admin">
+        <div class="eyebrow">Administração</div>
+        <h2>Gerenciar acessos</h2>
+        <p class="desc">Cada conta criada aqui só enxerga os próprios dados — a senha é gerada e mostrada uma única vez, então copie antes de fechar.</p>
 
-create policy "perfil_own_rw" on storage.objects for all
-  using (bucket_id = 'perfil' and auth.uid()::text = (storage.foldername(name))[1])
-  with check (bucket_id = 'perfil' and auth.uid()::text = (storage.foldername(name))[1]);
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Criar novo acesso</h3>
+          <div class="row">
+            <div class="field-block" style="flex:1;">
+              <label>Nome</label>
+              <input type="text" id="admin-nome" placeholder="Nome do cliente">
+            </div>
+            <div class="field-block" style="flex:1;">
+              <label>E-mail</label>
+              <input type="text" id="admin-email" placeholder="cliente@empresa.com">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field-block" style="flex:1;">
+              <label>Senha (deixe em branco para gerar automaticamente)</label>
+              <input type="text" id="admin-senha" placeholder="mínimo 6 caracteres">
+            </div>
+            <div class="field-block" style="flex:1;">
+              <label>DDD</label>
+              <input type="text" id="admin-ddd" maxlength="2" placeholder="48">
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="admin-criar-usuario">Criar acesso</button>
+          </div>
+          <div id="admin-resultado" class="hint" style="display:none;"></div>
+        </div>
 
-create policy "midias_own_rw" on storage.objects for all
-  using (bucket_id = 'midias' and auth.uid()::text = (storage.foldername(name))[1])
-  with check (bucket_id = 'midias' and auth.uid()::text = (storage.foldername(name))[1]);
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Usuários com acesso</h3>
+          <table class="contatos" id="admin-tabela-usuarios">
+            <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Admin</th></tr></thead>
+            <tbody id="admin-tabela-usuarios-body"></tbody>
+          </table>
+        </div>
 
-create policy "arquivos_own_rw" on storage.objects for all
-  using (bucket_id = 'arquivos' and auth.uid()::text = (storage.foldername(name))[1])
-  with check (bucket_id = 'arquivos' and auth.uid()::text = (storage.foldername(name))[1]);
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Últimos acessos</h3>
+          <p class="hint" style="margin-top:-4px;">Cada login no painel gera uma linha aqui.</p>
+          <table class="contatos" id="admin-tabela-acessos">
+            <thead><tr><th>E-mail</th><th>Quando</th><th>Dispositivo</th></tr></thead>
+            <tbody id="admin-tabela-acessos-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Diagnóstico visível: qualquer erro de JS aparece na tela ---------- */
+window.onerror = function(msg, src, line){
+  var el = document.getElementById('erro-overlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'erro-overlay';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#D6564A;color:#fff;padding:12px 16px;font:13px monospace;z-index:9999;white-space:pre-wrap;';
+    document.body.appendChild(el);
+  }
+  el.textContent = 'Erro no site: ' + msg + ' (linha ' + line + ')';
+};
+
+function bootApp(){
+
+/* =========================================================
+   CONFIGURAÇÃO — troque pelos dados do seu projeto Supabase
+   ========================================================= */
+const SUPABASE_URL = "https://sfjxgbkvnjfvzbguwwhf.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmanhnYmt2bmpmdnpiZ3V3d2hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5NjM3MzAsImV4cCI6MjA4NDUzOTczMH0.JtlgLxwYEkvIZEqGqDUOi3vng2HAf9M34XayW4w6orA";
+const N8N_WEBHOOK_LISTAR_GRUPOS = "https://SEU-N8N.dominio.com/webhook/listar-grupos";
+const N8N_WEBHOOK_ENVIAR_DEMANDA = "https://SEU-N8N.dominio.com/webhook/enviar-demanda";
+const N8N_WEBHOOK_CRIAR_USUARIO = "https://SEU-N8N.dominio.com/webhook/criar-usuario";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let profile = { ddd:"", evolution_api_url:"", evolution_instance:"", evolution_api_key:"", foto_perfil_url:"" };
+let midiaAtual = { url:null, tipo:"image", nomeArquivo:null };
+let contatosImportados = [];
+let listaAtualId = null;
+let numerosTeste = [];
+let campaignAtualId = null;
+
+/* ---------- helpers ---------- */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function pastaUsuario(bucketPathPrefix){
+  return `${currentUser.id}/${Date.now()}_${bucketPathPrefix}`;
+}
+async function uploadArquivo(bucket, file){
+  const path = `${currentUser.id}/${Date.now()}_${file.name}`;
+  const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert:true });
+  if(error){ toast('Erro no upload: ' + error.message); throw error; }
+  const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 60*60*24*7);
+  return signed ? signed.signedUrl : path;
+}
+
+/* ---------- AUTH ---------- */
+function chaveEhServiceRole(){
+  try{
+    const payload = JSON.parse(atob(SUPABASE_ANON_KEY.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return payload.role === 'service_role';
+  }catch(e){ return false; }
+}
+
+function configPendente(){
+  return SUPABASE_ANON_KEY.includes('SUA_ANON_KEY');
+}
+
+function mostrarAuthMsg(msg, ok){
+  const el = document.getElementById('auth-msg');
+  el.style.color = ok ? '#17A673' : '#E8A33D';
+  el.textContent = msg;
+}
+
+function traduzErroAuth(error){
+  const m = (error && error.message) || '';
+  if(m.includes('Failed to fetch')) return 'Não foi possível conectar ao Supabase. Confira a URL e a anon key no topo do index.html, e sua conexão com a internet.';
+  if(m.includes('Invalid login credentials')) return 'E-mail ou senha incorretos.';
+  if(m.includes('Email not confirmed')) return 'E-mail ainda não confirmado. Abra o link enviado para sua caixa de entrada (veja o spam) ou desative "Confirm email" no Supabase em Authentication → Sign In / Providers.';
+  if(m.includes('User already registered')) return 'Este e-mail já tem uma conta. Use o botão "Entrar".';
+  if(m.includes('Password should be at least')) return 'A senha precisa ter no mínimo 6 caracteres.';
+  if(m.includes('Signups not allowed') || m.includes('signup is disabled')) return 'O cadastro está desativado no Supabase. Ative em Authentication → Sign In / Providers → Email, ou crie o acesso pelo painel de admin.';
+  if(m.includes('rate limit') || m.includes('Too many')) return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+  if(m.toLowerCase().includes('anonymous') || m.includes('Invalid API key')) return 'A anon key parece inválida. Copie de novo em Project Settings → API no Supabase.';
+  return m || 'Erro desconhecido.';
+}
+
+function validarCamposAuth(email, password){
+  if(configPendente()){
+    mostrarAuthMsg('O site ainda não foi conectado ao Supabase: cole a anon key no topo do index.html.');
+    return false;
+  }
+  if(chaveEhServiceRole()){
+    mostrarAuthMsg('PERIGO: a chave colada é a service_role, não a anon. Troque pela chave "anon / public" (Project Settings → API) — a service_role exposta no site dá acesso total ao banco.');
+    return false;
+  }
+  if(!email || !email.includes('@')){ mostrarAuthMsg('Digite um e-mail válido.'); return false; }
+  if(!password || password.length < 6){ mostrarAuthMsg('A senha precisa ter no mínimo 6 caracteres.'); return false; }
+  return true;
+}
+
+document.getElementById('btn-login').onclick = async () => {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!validarCamposAuth(email, password)) return;
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try{
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error){ mostrarAuthMsg(traduzErroAuth(error)); return; }
+    await bootAfterLogin(true);
+  }catch(e){
+    mostrarAuthMsg(traduzErroAuth(e));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+};
+
+document.getElementById('btn-signup').onclick = async () => {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!validarCamposAuth(email, password)) return;
+  const btn = document.getElementById('btn-signup');
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try{
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if(error){ mostrarAuthMsg(traduzErroAuth(error)); return; }
+    // Se "Confirm email" estiver DESLIGADO no Supabase, já vem uma sessão: entra direto.
+    if(data && data.session){
+      await bootAfterLogin(true);
+      return;
+    }
+    // Se identities vier vazio, o e-mail já existia (o Supabase não avisa por segurança).
+    if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0){
+      mostrarAuthMsg('Este e-mail já tem uma conta. Use o botão "Entrar" (ou recupere a senha).');
+      return;
+    }
+    mostrarAuthMsg('Conta criada! Enviamos um link de confirmação para o seu e-mail — abra-o (veja o spam) e depois faça login aqui.', true);
+  }catch(e){
+    mostrarAuthMsg(traduzErroAuth(e));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Criar conta';
+  }
+};
+
+// Enter no campo de senha = tentar entrar
+document.getElementById('auth-password').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('btn-login').click();
+});
+
+// Aviso imediato se o arquivo ainda não foi configurado (ou configurado com a chave errada)
+if(configPendente()){
+  mostrarAuthMsg('Atenção: cole a anon key no topo do index.html antes de usar.');
+} else if(chaveEhServiceRole()){
+  mostrarAuthMsg('PERIGO: a chave configurada é a service_role. Troque pela anon key e gere uma nova service_role no Supabase, pois essa foi exposta.');
+}
+
+document.getElementById('btn-logout').onclick = async () => {
+  await supabase.auth.signOut();
+  location.reload();
+};
+
+async function registrarAcesso(){
+  // grava 1 linha em acessos_log por login (RLS: cada um só insere o próprio)
+  try{
+    await supabase.from('acessos_log').insert({
+      user_id: currentUser.id,
+      email: currentUser.email,
+      user_agent: navigator.userAgent.slice(0, 250)
+    });
+  }catch(e){ /* log de acesso nunca deve travar o uso do painel */ }
+}
+
+async function bootAfterLogin(novoLogin){
+  const { data: { user } } = await supabase.auth.getUser();
+  if(!user) return;
+  currentUser = user;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('rail-user-email').textContent = user.email;
+  if(novoLogin) await registrarAcesso();
+  await carregarProfile();
+  await carregarNumerosTeste();
+  carregarGrupos();
+}
+
+(async function initSession(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(session){ await bootAfterLogin(); }
+})();
+
+/* ---------- NAVEGAÇÃO ENTRE ETAPAS ---------- */
+document.querySelectorAll('.step').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelector(`.panel[data-panel="${el.dataset.step}"]`).classList.add('active');
+  });
+});
+function marcarEtapaConcluida(n){
+  const el = document.querySelector(`.step[data-step="${n}"]`);
+  if(el) el.classList.add('done');
+}
+
+/* ---------- PROFILE (etapas 1 e 2) ---------- */
+async function carregarProfile(){
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+  if(data){
+    profile = data;
+    if(profile.nome) document.getElementById('input-nome-perfil').value = profile.nome;
+    if(profile.ddd) document.getElementById('input-ddd').value = profile.ddd;
+    if(profile.foto_perfil_url){
+      const img = document.getElementById('avatar-preview');
+      img.src = profile.foto_perfil_url; img.style.display='block';
+      marcarEtapaConcluida(1);
+    }
+    if(profile.ddd) marcarEtapaConcluida(2);
+    if(profile.is_admin){
+      document.getElementById('nav-admin').style.display = 'block';
+      carregarUsuariosAdmin();
+      carregarAcessosAdmin();
+    }
+  }
+}
+
+document.getElementById('drop-avatar').onclick = ()=>document.getElementById('input-avatar').click();
+document.getElementById('input-avatar').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = document.getElementById('avatar-preview');
+    img.src = reader.result; img.style.display='block';
+    document.getElementById('drop-avatar').classList.add('filled');
+    document.getElementById('drop-avatar').textContent = file.name;
+  };
+  reader.readAsDataURL(file);
+};
+document.getElementById('save-avatar').onclick = async ()=>{
+  const file = document.getElementById('input-avatar').files[0];
+  if(!file){ toast('Selecione uma foto primeiro'); return; }
+  const url = await uploadArquivo('perfil', file);
+  await supabase.from('profiles').update({ foto_perfil_url: url }).eq('id', currentUser.id);
+  toast('Foto de perfil salva'); marcarEtapaConcluida(1);
+};
+
+document.getElementById('save-ddd').onclick = async ()=>{
+  const nome = document.getElementById('input-nome-perfil').value.trim();
+  const ddd = document.getElementById('input-ddd').value.trim();
+  if(!nome){ toast('Informe o nome do perfil'); return; }
+  if(!ddd){ toast('Informe o DDD'); return; }
+  const { error } = await supabase.from('profiles').update({ nome, ddd }).eq('id', currentUser.id);
+  if(error){ toast('Erro ao salvar: ' + error.message); return; }
+  profile = { ...profile, nome, ddd };
+  toast('Perfil salvo'); marcarEtapaConcluida(2);
+};
+
+/* ---------- MÍDIA (etapa 3) ---------- */
+document.getElementById('drop-midia').onclick = ()=>document.getElementById('input-midia').click();
+document.getElementById('input-midia').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const tipo = document.getElementById('select-midia-tipo').value;
+  document.getElementById('drop-midia').classList.add('filled');
+  document.getElementById('drop-midia').textContent = file.name;
+  ['midia-preview-img','midia-preview-video','midia-preview-doc'].forEach(id=>document.getElementById(id).style.display='none');
+  if(tipo === 'image'){
+    const reader = new FileReader();
+    reader.onload = ()=>{ const el=document.getElementById('midia-preview-img'); el.src=reader.result; el.style.display='block'; };
+    reader.readAsDataURL(file);
+  } else if(tipo === 'video'){
+    const el = document.getElementById('midia-preview-video');
+    el.src = URL.createObjectURL(file); el.style.display='block';
+  } else {
+    const el = document.getElementById('midia-preview-doc');
+    el.textContent = `Documento selecionado: ${file.name} (${(file.size/1024).toFixed(0)} KB)`;
+    el.style.display = 'block';
+  }
+};
+document.getElementById('save-midia').onclick = async ()=>{
+  const file = document.getElementById('input-midia').files[0];
+  if(!file){ toast('Selecione um arquivo primeiro'); return; }
+  const tipo = document.getElementById('select-midia-tipo').value;
+  const url = await uploadArquivo('midias', file);
+  midiaAtual = { url, tipo, nomeArquivo: file.name };
+  toast('Mídia salva'); marcarEtapaConcluida(3);
+};
+
+/* ---------- MENSAGEM (etapa 4) ---------- */
+function montarPreview(){
+  const v1 = document.getElementById('input-var1').value || '{{1}}';
+  const v2 = document.getElementById('input-var2').value || '{{2}}';
+  const v3 = document.getElementById('input-var3').value || '{{3}}';
+  const v4 = document.getElementById('input-var4').value || '{{4}}';
+  document.getElementById('template-preview').innerHTML =
+    `Olá <span class="tag">${escapeHtml(v1)}</span> !\n` +
+    `Temos uma novidade: ${escapeHtml(v2)}\n` +
+    `${escapeHtml(v3)}\n` +
+    `Para ${escapeHtml(v4)}, use o botão abaixo. ⬇️`;
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+['input-var1','input-var2','input-var3','input-var4'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', montarPreview);
+});
+montarPreview();
+
+document.getElementById('save-mensagem').onclick = ()=>{
+  toast('Mensagem salva'); marcarEtapaConcluida(4);
+};
+
+/* ---------- LINK (etapa 5) ---------- */
+document.getElementById('save-link').onclick = ()=>{
+  const link = document.getElementById('input-link').value.trim();
+  if(!link){ toast('Informe um link'); return; }
+  toast('Link salvo'); marcarEtapaConcluida(5);
+};
+
+/* ---------- LISTA DE CONTATOS (etapa 6) ---------- */
+document.getElementById('drop-lista').onclick = ()=>document.getElementById('input-lista').click();
+document.getElementById('input-lista').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  document.getElementById('drop-lista').classList.add('filled');
+  document.getElementById('drop-lista').textContent = file.name;
+
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    let linhas = [];
+    if(file.name.endsWith('.csv')){
+      const texto = ev.target.result;
+      linhas = texto.split(/\r?\n/).filter(Boolean).map(l=>l.split(/[,;]/));
+    } else {
+      const wb = XLSX.read(ev.target.result, { type:'binary' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      linhas = XLSX.utils.sheet_to_json(sheet, { header:1 });
+    }
+    // detecta se a primeira linha é cabeçalho
+    let inicio = 0;
+    const cab = (linhas[0]||[]).map(c=>String(c).toLowerCase());
+    if(cab.includes('nome') || cab.includes('telefone')) inicio = 1;
+
+    contatosImportados = linhas.slice(inicio)
+      .filter(l=>l && l[1])
+      .map(l=>({ nome: String(l[0]||'').trim(), telefone: String(l[1]||'').replace(/\D/g,'') }));
+
+    document.getElementById('lista-resumo').textContent = `${contatosImportados.length} contatos encontrados`;
+    const tbody = document.getElementById('tabela-contatos-body');
+    tbody.innerHTML = contatosImportados.slice(0,50).map(c=>`<tr><td>${escapeHtml(c.nome)}</td><td class="mono">${escapeHtml(c.telefone)}</td></tr>`).join('');
+    document.getElementById('tabela-contatos').style.display = contatosImportados.length ? 'table' : 'none';
+  };
+  if(file.name.endsWith('.csv')) reader.readAsText(file); else reader.readAsBinaryString(file);
+};
+
+document.getElementById('save-lista').onclick = async ()=>{
+  const nome = document.getElementById('input-lista-nome').value.trim();
+  if(!nome){ toast('Dê um nome para a lista'); return; }
+  if(!contatosImportados.length){ toast('Importe um arquivo com contatos primeiro'); return; }
+
+  // sobe o arquivo original — ele vai anexado na demanda enviada ao grupo
+  const arquivo = document.getElementById('input-lista').files[0];
+  let arquivoUrl = null;
+  if(arquivo){ arquivoUrl = await uploadArquivo('arquivos', arquivo); }
+
+  const { data: lista, error } = await supabase.from('listas')
+    .insert({ user_id: currentUser.id, nome, arquivo_url: arquivoUrl, total_contatos: contatosImportados.length })
+    .select().single();
+  if(error){ toast('Erro ao salvar lista: ' + error.message); return; }
+  listaAtualId = lista.id;
+
+  const linhas = contatosImportados.map(c=>({ user_id: currentUser.id, lista_id: lista.id, nome: c.nome, telefone: c.telefone }));
+  // insere em lotes de 500
+  for(let i=0;i<linhas.length;i+=500){
+    await supabase.from('contatos').insert(linhas.slice(i, i+500));
+  }
+  toast('Lista salva com ' + contatosImportados.length + ' contatos'); marcarEtapaConcluida(6);
+};
+
+/* ---------- NÚMEROS DE TESTE (etapa 7) ---------- */
+async function carregarNumerosTeste(){
+  const { data } = await supabase.from('numeros_teste').select('*').eq('user_id', currentUser.id);
+  numerosTeste = data || [];
+  renderNumerosTeste();
+}
+function renderNumerosTeste(){
+  const el = document.getElementById('lista-teste-numeros');
+  el.innerHTML = numerosTeste.map(n=>`<span class="chip">${escapeHtml(n.telefone)}<button data-id="${n.id}">×</button></span>`).join('');
+  el.querySelectorAll('button').forEach(btn=>{
+    btn.onclick = async ()=>{
+      await supabase.from('numeros_teste').delete().eq('id', btn.dataset.id);
+      numerosTeste = numerosTeste.filter(n=>n.id !== btn.dataset.id);
+      renderNumerosTeste();
+    };
+  });
+}
+document.getElementById('add-teste-numero').onclick = async ()=>{
+  const input = document.getElementById('input-teste-numero');
+  const numero = input.value.replace(/\D/g,'');
+  if(!numero){ toast('Digite um número válido'); return; }
+  const { data, error } = await supabase.from('numeros_teste').insert({ user_id: currentUser.id, telefone: numero }).select().single();
+  if(error){ toast('Erro: ' + error.message); return; }
+  numerosTeste.push(data); renderNumerosTeste(); input.value = '';
+  marcarEtapaConcluida(7);
+};
+
+/* ---------- ENVIO (etapa 8) — envia a DEMANDA para o grupo de WhatsApp ----------
+   O site não dispara para lista de contatos. Ele empacota tudo que o cliente
+   preencheu (perfil, DDD, mídia, mensagem, link, lista, números de teste) e
+   envia para o GRUPO escolhido, via webhook do n8n. A Evolution API é uma só,
+   central, configurada no n8n — o cliente não configura nada. */
+
+let logPollTimer = null;
+let logIdsVistos = new Set();
+let gruposDisponiveis = [];
+
+function renderLogRow(row){
+  if(logIdsVistos.has(row.id)) return;
+  logIdsVistos.add(row.id);
+  const el = document.getElementById('envio-log');
+  const div = document.createElement('div');
+  div.className = 'log-row ' + row.status;
+  div.innerHTML = `<span class="mono">${escapeHtml(row.telefone||'')}</span><span>${row.status === 'enviado' ? 'enviado ✓' : 'erro'}</span>`;
+  el.prepend(div);
+}
+
+function iniciarAcompanhamentoLog(){
+  if(logPollTimer) clearInterval(logPollTimer);
+  logIdsVistos = new Set();
+  document.getElementById('envio-log').innerHTML = '';
+  logPollTimer = setInterval(async ()=>{
+    if(!campaignAtualId) return;
+    const { data } = await supabase.from('envios_log')
+      .select('*').eq('campaign_id', campaignAtualId)
+      .order('created_at', { ascending:false }).limit(200);
+    (data||[]).slice().reverse().forEach(renderLogRow);
+  }, 3000);
+  setTimeout(()=>{ if(logPollTimer) clearInterval(logPollTimer); }, 10*60*1000);
+}
+
+async function carregarGrupos(){
+  const sel = document.getElementById('select-grupo');
+  sel.innerHTML = '<option value="">Carregando grupos...</option>';
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session) return;
+  try{
+    const resp = await fetch(N8N_WEBHOOK_LISTAR_GRUPOS, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({})
+    });
+    if(!resp.ok) throw new Error('resposta ' + resp.status);
+    const grupos = await resp.json();
+    gruposDisponiveis = Array.isArray(grupos) ? grupos : (grupos.grupos || []);
+    if(!gruposDisponiveis.length){
+      sel.innerHTML = '<option value="">Nenhum grupo encontrado</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Selecione o grupo...</option>' +
+      gruposDisponiveis.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.nome)}</option>`).join('');
+  }catch(e){
+    sel.innerHTML = '<option value="">Falha ao carregar — clique em ↻</option>';
+  }
+}
+document.getElementById('btn-recarregar-grupos').onclick = carregarGrupos;
+
+async function garantirCampanha(){
+  if(campaignAtualId) return campaignAtualId;
+  const sel = document.getElementById('select-grupo');
+  const grupoNome = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].text : '';
+  const { data, error } = await supabase.from('campaigns').insert({
+    user_id: currentUser.id,
+    nome: 'Demanda ' + new Date().toLocaleDateString('pt-BR'),
+    midia_url: midiaAtual.url, midia_tipo: midiaAtual.tipo, midia_nome_arquivo: midiaAtual.nomeArquivo,
+    var1_nome: document.getElementById('input-var1').value,
+    var2_novidade: document.getElementById('input-var2').value,
+    var3_texto: document.getElementById('input-var3').value,
+    var4_cta: document.getElementById('input-var4').value,
+    link_redirecionamento: document.getElementById('input-link').value,
+    lista_id: listaAtualId,
+    grupo_id: sel.value,
+    grupo_nome: grupoNome
+  }).select().single();
+  if(error){ toast('Erro ao salvar a demanda: ' + error.message); return null; }
+  campaignAtualId = data.id;
+  return campaignAtualId;
+}
+
+document.getElementById('btn-enviar-demanda').onclick = async ()=>{
+  const grupoId = document.getElementById('select-grupo').value;
+  if(!grupoId){ toast('Selecione o grupo de WhatsApp'); return; }
+  if(!document.getElementById('input-var2').value){
+    toast('Preencha a mensagem na etapa 4'); return;
+  }
+  const btn = document.getElementById('btn-enviar-demanda');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try{
+    campaignAtualId = null; // cada envio de demanda gera um registro novo
+    const id = await garantirCampanha();
+    if(!id) return;
+    iniciarAcompanhamentoLog();
+    const { data: { session } } = await supabase.auth.getSession();
+    const resp = await fetch(N8N_WEBHOOK_ENVIAR_DEMANDA, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ campaign_id: id, grupo_id: grupoId })
+    });
+    if(!resp.ok){ toast('O n8n recusou a chamada (verifique a URL do webhook)'); return; }
+    toast('Demanda enviada para o grupo — acompanhe o log abaixo');
+  }catch(e){
+    toast('Não foi possível enviar: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Enviar demanda para o grupo';
+  }
+};
+
+/* ---------- ADMIN: GERENCIAR ACESSOS ---------- */
+async function carregarUsuariosAdmin(){
+  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending:false });
+  if(error){ toast('Erro ao carregar usuários: ' + error.message); return; }
+  const tbody = document.getElementById('admin-tabela-usuarios-body');
+  tbody.innerHTML = (data||[]).map(u => `
+    <tr>
+      <td>${escapeHtml(u.nome || '—')}</td>
+      <td class="mono">${escapeHtml(u.email || '—')}</td>
+      <td>${escapeHtml(u.ddd || '—')}</td>
+      <td>${u.is_admin ? '★ admin' : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+async function carregarAcessosAdmin(){
+  const { data, error } = await supabase.from('acessos_log')
+    .select('*').order('created_at', { ascending:false }).limit(100);
+  if(error){ toast('Erro ao carregar acessos: ' + error.message); return; }
+  const tbody = document.getElementById('admin-tabela-acessos-body');
+  tbody.innerHTML = (data||[]).map(a => `
+    <tr>
+      <td class="mono">${escapeHtml(a.email || '—')}</td>
+      <td>${new Date(a.created_at).toLocaleString('pt-BR')}</td>
+      <td>${escapeHtml(resumoDispositivo(a.user_agent))}</td>
+    </tr>
+  `).join('');
+}
+
+function resumoDispositivo(ua){
+  if(!ua) return '—';
+  if(/Android/i.test(ua)) return 'Android';
+  if(/iPhone|iPad/i.test(ua)) return 'iPhone/iPad';
+  if(/Windows/i.test(ua)) return 'Windows';
+  if(/Mac OS/i.test(ua)) return 'Mac';
+  if(/Linux/i.test(ua)) return 'Linux';
+  return 'Outro';
+}
+
+document.getElementById('admin-criar-usuario').onclick = async ()=>{
+  const email = document.getElementById('admin-email').value.trim();
+  if(!email){ toast('Informe o e-mail do novo acesso'); return; }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ toast('Sessão expirada, faça login novamente'); return; }
+
+  const payload = {
+    nome: document.getElementById('admin-nome').value.trim(),
+    email,
+    senha: document.getElementById('admin-senha').value.trim(),
+    ddd: document.getElementById('admin-ddd').value.trim()
+  };
+
+  const btn = document.getElementById('admin-criar-usuario');
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try{
+    const resp = await fetch(N8N_WEBHOOK_CRIAR_USUARIO, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    const resultado = document.getElementById('admin-resultado');
+    resultado.style.display = 'block';
+    if(!resp.ok){
+      resultado.style.color = 'var(--red)';
+      resultado.textContent = data.erro || 'Erro ao criar acesso.';
+    } else {
+      resultado.style.color = 'var(--jade-dark)';
+      resultado.textContent = `Acesso criado! E-mail: ${data.email} — Senha: ${data.senha_temporaria} (copie agora, não fica salva em nenhum lugar visível depois)`;
+      ['admin-nome','admin-email','admin-senha','admin-ddd'].forEach(id=>document.getElementById(id).value='');
+      carregarUsuariosAdmin();
+    }
+  }catch(e){
+    toast('Não foi possível chamar o webhook: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Criar acesso';
+  }
+};
+
+} /* fim bootApp */
+
+/* ---------- Carregador da biblioteca do Supabase, com fallback ----------
+   O CDN principal (jsdelivr) pode estar bloqueado em alguns ambientes —
+   por exemplo, a pré-visualização de HTML dentro do Claude bloqueia tudo
+   que não for cdnjs. Nesses casos tentamos o unpkg e, se nada funcionar,
+   explicamos na tela em vez de falhar em silêncio. ---------- */
+(function garantirSupabase(){
+  function erroLib(){
+    var msg = document.getElementById('auth-msg');
+    var texto = 'A biblioteca do Supabase não carregou. Se você está vendo esta página dentro da pré-visualização do Claude, ela bloqueia o CDN — baixe o index.html e abra no navegador (dois cliques no arquivo) ou hospede no Netlify/Vercel. Se já está no navegador, verifique sua internet.';
+    if(msg){ msg.style.color = '#E8A33D'; msg.textContent = texto; } else { alert(texto); }
+  }
+  function pronto(){ return window.supabase && window.supabase.createClient; }
+  if(pronto()){ bootApp(); return; }
+  var alt = document.createElement('script');
+  alt.src = 'https://unpkg.com/@supabase/supabase-js@2';
+  alt.onload = function(){ pronto() ? bootApp() : erroLib(); };
+  alt.onerror = erroLib;
+  document.head.appendChild(alt);
+})();
+</script>
+</body>
+</html>
