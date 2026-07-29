@@ -200,6 +200,7 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 7</div>
 
       <ul class="steps" id="steps-nav">
         <li class="step active" data-step="1"><span class="dot">1</span>Foto de perfil</li>
@@ -380,6 +381,7 @@
           </div>
           <div class="btn-row">
             <button class="btn btn-solid" id="btn-enviar-demanda">Enviar demanda para o grupo</button>
+            <button class="btn" id="btn-limpar-tudo">Limpar tudo e recomeçar</button>
           </div>
           <div class="log" id="envio-log"></div>
         </div>
@@ -1017,10 +1019,11 @@ async function novaDemanda(){
 
   // foto de perfil + nome + ddd (banco e tela)
   try{
-    await supabase.from('profiles')
+    const { error } = await supabase.from('profiles')
       .update({ foto_perfil_url: null, nome: null, ddd: null })
       .eq('id', currentUser.id);
-  }catch(e){}
+    if(error) toast('Aviso: não deu para limpar o perfil no banco: ' + error.message);
+  }catch(e){ toast('Aviso: não deu para limpar o perfil no banco: ' + e.message); }
   profile.foto_perfil_url = null; profile.nome = null; profile.ddd = null;
   document.getElementById('input-nome-perfil').value = '';
   document.getElementById('input-ddd').value = '';
@@ -1076,6 +1079,12 @@ async function novaDemanda(){
 
   irParaEtapa(1);
 }
+
+document.getElementById('btn-limpar-tudo').onclick = async ()=>{
+  if(!confirm('Apagar TODOS os dados preenchidos (foto, DDD, mídia, mensagem, link, lista, números de teste) e recomeçar do zero?')) return;
+  await novaDemanda();
+  toast('Tudo limpo — pode começar uma nova demanda.');
+};
 
 document.getElementById('btn-enviar-demanda').onclick = async ()=>{
   if(!profile.grupo_id){ toast('Nenhum grupo vinculado ao seu acesso'); return; }
