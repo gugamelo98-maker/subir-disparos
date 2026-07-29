@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Disparos · WhatsApp</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+  :root{
+    --ink:#0E1512;
+    --ink-2:#16201C;
+    --paper:#F7F5F0;
+    --paper-2:#FFFFFF;
+    --line:#DCD8CC;
+    --jade:#17A673;
+    --jade-dark:#0E7C56;
+    --amber:#E8A33D;
+    --red:#D6564A;
+    --text:#1B211E;
+    --text-soft:#5B6560;
+    --text-inv:#EFF3F0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',sans-serif;background:var(--paper);color:var(--text);}
+  h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+
+  /* ---------- AUTH ---------- */
+  #auth-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(23,166,115,0.12), transparent 40%),
+      var(--ink);
+  }
+  .auth-card{
+    width:380px;background:var(--ink-2);border:1px solid #24312B;border-radius:14px;
+    padding:36px 32px;color:var(--text-inv);
+  }
+  .auth-card h1{font-size:22px;margin:0 0 4px;}
+  .auth-card p.sub{color:#8FA098;font-size:13px;margin:0 0 24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:#8FA098;margin-bottom:6px;letter-spacing:.02em;}
+  .field input{
+    width:100%;padding:10px 12px;border-radius:8px;border:1px solid #2C3B34;
+    background:#0E1512;color:var(--text-inv);font-size:14px;
+  }
+  .field input:focus{outline:2px solid var(--jade);outline-offset:1px;}
+  .btn-primary{
+    width:100%;padding:11px;border:none;border-radius:8px;background:var(--jade);
+    color:#06231A;font-weight:600;font-size:14px;margin-top:6px;
+  }
+  .btn-primary:hover{background:#1EC38B;}
+  .btn-link{background:none;border:none;color:#8FA098;font-size:13px;text-decoration:underline;padding:0;margin-top:14px;}
+  #auth-msg{font-size:13px;margin-top:12px;color:var(--amber);min-height:16px;}
+
+  /* ---------- APP SHELL ---------- */
+  #app{display:none;min-height:100vh;}
+  .shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh;}
+  .rail{background:var(--ink);color:var(--text-inv);padding:24px 18px;position:relative;}
+  .rail-brand{font-size:15px;font-weight:600;letter-spacing:.02em;margin-bottom:4px;}
+  .rail-brand span{color:var(--jade);}
+  .rail-user{font-size:12px;color:#8FA098;margin-bottom:28px;word-break:break-all;}
+
+  .steps{list-style:none;margin:0;padding:0;position:relative;}
+  .steps::before{
+    content:"";position:absolute;left:13px;top:6px;bottom:6px;width:1px;background:#26332C;
+  }
+  .step{position:relative;padding:10px 0 10px 34px;cursor:pointer;font-size:13.5px;color:#9BAAA2;border-radius:8px;}
+  .step:hover{color:var(--text-inv);}
+  .step .dot{
+    position:absolute;left:6px;top:12px;width:15px;height:15px;border-radius:50%;
+    background:var(--ink-2);border:1.5px solid #33453C;font-family:'IBM Plex Mono',monospace;
+    font-size:9px;display:flex;align-items:center;justify-content:center;color:#8FA098;
+  }
+  .step.active{color:var(--text-inv);font-weight:600;}
+  .step.active .dot{background:var(--jade);border-color:var(--jade);color:#06231A;}
+  .step.done .dot{background:#1B2620;border-color:var(--jade);color:var(--jade);}
+  .step.done .dot::after{content:"✓";}
+
+  .rail-foot{position:absolute;bottom:22px;left:18px;right:18px;}
+  .status-pill{
+    display:flex;align-items:center;gap:6px;font-size:11.5px;color:#8FA098;padding:8px 10px;
+    border:1px solid #26332C;border-radius:8px;margin-bottom:10px;
+  }
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);}
+  .status-dot.ok{background:var(--jade);}
+  .btn-logout{width:100%;background:none;border:1px solid #26332C;color:#8FA098;padding:8px;border-radius:8px;font-size:12.5px;}
+  .btn-logout:hover{color:var(--text-inv);border-color:#3A4A41;}
+
+  .main{padding:36px 44px;max-width:760px;}
+  .panel{display:none;}
+  .panel.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  .eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--jade);font-weight:600;margin-bottom:6px;}
+  .panel h2{font-size:24px;margin:0 0 6px;}
+  .panel .desc{color:var(--text-soft);font-size:14px;margin:0 0 26px;max-width:520px;}
+
+  .card{background:var(--paper-2);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:16px;}
+  .row{display:flex;gap:14px;}
+  .field-block{margin-bottom:16px;}
+  .field-block label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--text);}
+  .field-block .hint{font-size:12px;color:var(--text-soft);margin-top:5px;}
+  .field-block input[type=text],.field-block input[type=tel],.field-block textarea,.field-block select{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--paper-2);
+  }
+  .field-block textarea{resize:vertical;min-height:70px;}
+  .field-block input:focus,.field-block textarea:focus,.field-block select:focus{outline:2px solid var(--jade);outline-offset:1px;border-color:var(--jade);}
+
+  .dropzone{
+    border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;cursor:pointer;
+    font-size:13px;color:var(--text-soft);background:#FAFAF7;
+  }
+  .dropzone:hover{border-color:var(--jade);color:var(--jade-dark);}
+  .dropzone.filled{border-style:solid;border-color:var(--jade);color:var(--jade-dark);background:#EEFAF5;}
+  .preview-img{max-width:100%;max-height:220px;border-radius:8px;margin-top:12px;}
+  .avatar-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--jade);margin-top:10px;}
+
+  .btn{padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--paper-2);font-size:13.5px;font-weight:600;color:var(--text);}
+  .btn:hover{border-color:var(--jade);}
+  .btn-solid{background:var(--jade);border-color:var(--jade);color:#06231A;}
+  .btn-solid:hover{background:#1EC38B;}
+  .btn-solid:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-row{display:flex;gap:10px;margin-top:20px;}
+
+  .template-preview{
+    background:#0E1512;color:#EAF3EE;border-radius:10px;padding:16px 18px;font-size:13.5px;line-height:1.6;
+    white-space:pre-wrap;
+  }
+  .template-preview .tag{color:var(--jade);}
+
+  table.contatos{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px;}
+  table.contatos th{text-align:left;color:var(--text-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);}
+  table.contatos td{padding:6px 8px;border-bottom:1px solid #EEECE4;}
+
+  .chip-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .chip{background:#EEFAF5;color:var(--jade-dark);border:1px solid #C9EEDD;border-radius:999px;padding:5px 12px;font-size:12.5px;display:flex;align-items:center;gap:6px;}
+  .chip button{background:none;border:none;color:var(--jade-dark);font-size:14px;line-height:1;padding:0;}
+
+  .log{max-height:220px;overflow:auto;font-size:12.5px;margin-top:14px;}
+  .log-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #EEECE4;}
+  .log-row.erro{color:var(--red);}
+  .log-row.enviado{color:var(--jade-dark);}
+
+  .toast{
+    position:fixed;bottom:24px;right:24px;background:var(--ink);color:var(--text-inv);
+    padding:12px 18px;border-radius:9px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);
+    display:none;z-index:50;
+  }
+  .toast.show{display:block;animation:fade .2s ease;}
+
+  @media(max-width:820px){
+    .shell{grid-template-columns:1fr;}
+    .rail{position:sticky;top:0;z-index:10;padding:16px;}
+    .steps::before{display:none;}
+    .steps{display:flex;overflow-x:auto;gap:6px;}
+    .step{padding:8px 12px;white-space:nowrap;}
+    .step .dot{position:static;margin-right:6px;display:inline-flex;}
+    .rail-foot{position:static;margin-top:14px;}
+    .main{padding:24px 20px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= AUTH SCREEN ================= -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1>Painel de Disparos</h1>
+    <p class="sub">Acesso privado — cada conta só vê os próprios dados.</p>
+
+    <div class="field">
+      <label>E-mail</label>
+      <input type="text" id="auth-email" placeholder="voce@empresa.com" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="btn-primary" id="btn-login">Entrar</button>
+    <button class="btn-primary" id="btn-signup" style="background:transparent;border:1px solid #2C3B34;color:#EFF3F0;margin-top:8px;">Criar conta</button>
+    <div id="auth-msg"></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <div class="shell">
+
+    <!-- RAIL -->
+    <nav class="rail">
+      <div class="rail-brand">Disparos<span>.</span></div>
+      <div class="rail-user" id="rail-user-email">—</div>
+
+      <ul class="steps" id="steps-nav">
+        <li class="step active" data-step="1"><span class="dot">1</span>Foto de perfil</li>
+        <li class="step" data-step="2"><span class="dot">2</span>DDD</li>
+        <li class="step" data-step="3"><span class="dot">3</span>Vídeo ou imagem</li>
+        <li class="step" data-step="4"><span class="dot">4</span>Mensagem</li>
+        <li class="step" data-step="5"><span class="dot">5</span>Link de redirecionamento</li>
+        <li class="step" data-step="6"><span class="dot">6</span>Lista de contatos</li>
+        <li class="step" data-step="7"><span class="dot">7</span>Números de teste</li>
+        <li class="step" data-step="8"><span class="dot">8</span>Enviar</li>
+      </ul>
+
+      <div class="rail-foot">
+        <div class="status-pill"><span class="status-dot" id="evo-status-dot"></span><span id="evo-status-text">Evolution API não configurada</span></div>
+        <button class="btn-logout" id="btn-logout">Sair da conta</button>
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="main">
+
+      <!-- STEP 1: FOTO DE PERFIL -->
+      <section class="panel active" data-panel="1">
+        <div class="eyebrow">Etapa 1</div>
+        <h2>Foto de perfil</h2>
+        <p class="desc">Essa é a foto que aparece na instância conectada à Evolution API.</p>
+        <div class="card">
+          <div class="dropzone" id="drop-avatar">Clique para enviar uma imagem (JPG ou PNG)</div>
+          <input type="file" id="input-avatar" accept="image/*" style="display:none">
+          <img id="avatar-preview" class="avatar-preview" style="display:none">
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-avatar">Salvar foto</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: DDD -->
+      <section class="panel" data-panel="2">
+        <div class="eyebrow">Etapa 2</div>
+        <h2>DDD</h2>
+        <p class="desc">Usado como padrão ao completar números sem código de área.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>DDD (ex: 48)</label>
+            <input type="text" id="input-ddd" maxlength="2" placeholder="48">
+          </div>
+          <div class="field-block">
+            <label>Nome da instância na Evolution API</label>
+            <input type="text" id="input-instance" placeholder="minha-instancia">
+          </div>
+          <div class="field-block">
+            <label>URL base da Evolution API</label>
+            <input type="text" id="input-evo-url" placeholder="https://sua-evolution.com">
+          </div>
+          <div class="field-block">
+            <label>API Key da instância</label>
+            <input type="text" id="input-evo-key" placeholder="apikey">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-ddd">Salvar configuração</button>
+            <button class="btn" id="test-evo">Testar conexão</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: VIDEO OU IMAGEM -->
+      <section class="panel" data-panel="3">
+        <div class="eyebrow">Etapa 3</div>
+        <h2>Vídeo ou imagem da campanha</h2>
+        <p class="desc">Mídia enviada junto com a mensagem. Também aceita arquivos ZIP ou Excel como documento anexo.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Tipo de mídia</label>
+            <select id="select-midia-tipo">
+              <option value="image">Imagem</option>
+              <option value="video">Vídeo</option>
+              <option value="document">Documento (ZIP, XLSX, PDF...)</option>
+            </select>
+          </div>
+          <div class="dropzone" id="drop-midia">Clique para enviar o arquivo da campanha</div>
+          <input type="file" id="input-midia" accept="image/*,video/*,.zip,.xlsx,.xls,.pdf" style="display:none">
+          <img id="midia-preview-img" class="preview-img" style="display:none">
+          <video id="midia-preview-video" class="preview-img" controls style="display:none"></video>
+          <div id="midia-preview-doc" class="hint" style="display:none;margin-top:10px;"></div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-midia">Salvar mídia</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 4: MENSAGEM -->
+      <section class="panel" data-panel="4">
+        <div class="eyebrow">Etapa 4</div>
+        <h2>Mensagem</h2>
+        <p class="desc">{{1}} é preenchido automaticamente com o nome de cada contato da lista.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>{{2}} — a novidade</label>
+            <input type="text" id="input-var2" placeholder="ex: chegou a nova coleção">
+          </div>
+          <div class="field-block">
+            <label>{{3}} — texto livre</label>
+            <textarea id="input-var3" placeholder="ex: Peças exclusivas com até 30% off só essa semana."></textarea>
+          </div>
+          <div class="field-block">
+            <label>{{4}} — chamada para ação (o que a pessoa vai fazer)</label>
+            <input type="text" id="input-var4" placeholder="ex: garantir o seu desconto">
+          </div>
+          <div class="field-block">
+            <label>Pré-visualização</label>
+            <div class="template-preview" id="template-preview"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-mensagem">Salvar mensagem</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 5: LINK -->
+      <section class="panel" data-panel="5">
+        <div class="eyebrow">Etapa 5</div>
+        <h2>Link de redirecionamento</h2>
+        <p class="desc">Aparece no botão/rodapé da mensagem enviada.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>URL de destino</label>
+            <input type="text" id="input-link" placeholder="https://seusite.com/oferta">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-link">Salvar link</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 6: LISTA DE CONTATOS -->
+      <section class="panel" data-panel="6">
+        <div class="eyebrow">Etapa 6</div>
+        <h2>Lista de contatos</h2>
+        <p class="desc">Envie um CSV ou Excel com as colunas <span class="mono">nome</span> e <span class="mono">telefone</span>.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Nome da lista</label>
+            <input type="text" id="input-lista-nome" placeholder="ex: clientes-julho">
+          </div>
+          <div class="dropzone" id="drop-lista">Clique para enviar o arquivo (.csv, .xlsx)</div>
+          <input type="file" id="input-lista" accept=".csv,.xlsx,.xls" style="display:none">
+          <div id="lista-resumo" class="hint"></div>
+          <table class="contatos" id="tabela-contatos" style="display:none;">
+            <thead><tr><th>Nome</th><th>Telefone</th></tr></thead>
+            <tbody id="tabela-contatos-body"></tbody>
+          </table>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-lista">Salvar lista</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 7: NÚMEROS DE TESTE -->
+      <section class="panel" data-panel="7">
+        <div class="eyebrow">Etapa 7</div>
+        <h2>Números de teste</h2>
+        <p class="desc">Use para validar a mensagem antes do disparo em massa.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Número (com DDD)</label>
+            <input type="tel" id="input-teste-numero" placeholder="48999999999">
+          </div>
+          <button class="btn" id="add-teste-numero">Adicionar número</button>
+          <div class="chip-list" id="lista-teste-numeros"></div>
+        </div>
+      </section>
+
+      <!-- STEP 8: ENVIAR -->
+      <section class="panel" data-panel="8">
+        <div class="eyebrow">Etapa 8</div>
+        <h2>Enviar</h2>
+        <p class="desc">Envie primeiro para os números de teste antes de disparar para a lista inteira.</p>
+        <div class="card">
+          <div class="btn-row">
+            <button class="btn" id="btn-enviar-teste">Enviar para números de teste</button>
+            <button class="btn btn-solid" id="btn-enviar-lista">Disparar para a lista</button>
+          </div>
+          <div class="log" id="envio-log"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   CONFIGURAÇÃO — troque pelos dados do seu projeto Supabase
+   ========================================================= */
+const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
+const SUPABASE_ANON_KEY = "SUA_ANON_KEY_AQUI";
+const N8N_WEBHOOK_URL = "https://SEU-N8N.dominio.com/webhook/disparo-whatsapp";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let profile = { ddd:"", evolution_api_url:"", evolution_instance:"", evolution_api_key:"", foto_perfil_url:"" };
+let midiaAtual = { url:null, tipo:"image", nomeArquivo:null };
+let contatosImportados = [];
+let listaAtualId = null;
+let numerosTeste = [];
+let campaignAtualId = null;
+
+/* ---------- helpers ---------- */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function pastaUsuario(bucketPathPrefix){
+  return `${currentUser.id}/${Date.now()}_${bucketPathPrefix}`;
+}
+async function uploadArquivo(bucket, file){
+  const path = `${currentUser.id}/${Date.now()}_${file.name}`;
+  const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert:true });
+  if(error){ toast('Erro no upload: ' + error.message); throw error; }
+  const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 60*60*24*7);
+  return signed ? signed.signedUrl : path;
+}
+
+/* ---------- AUTH ---------- */
+document.getElementById('btn-login').onclick = async () => {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if(error){ document.getElementById('auth-msg').textContent = error.message; return; }
+  await bootAfterLogin();
+};
+
+document.getElementById('btn-signup').onclick = async () => {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const { error } = await supabase.auth.signUp({ email, password });
+  if(error){ document.getElementById('auth-msg').textContent = error.message; return; }
+  document.getElementById('auth-msg').style.color = '#17A673';
+  document.getElementById('auth-msg').textContent = 'Conta criada! Verifique seu e-mail se a confirmação estiver ativada, depois faça login.';
+};
+
+document.getElementById('btn-logout').onclick = async () => {
+  await supabase.auth.signOut();
+  location.reload();
+};
+
+async function bootAfterLogin(){
+  const { data: { user } } = await supabase.auth.getUser();
+  if(!user) return;
+  currentUser = user;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('rail-user-email').textContent = user.email;
+  await carregarProfile();
+  await carregarNumerosTeste();
+  atualizarStatusEvo();
+}
+
+(async function initSession(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(session){ await bootAfterLogin(); }
+})();
+
+/* ---------- NAVEGAÇÃO ENTRE ETAPAS ---------- */
+document.querySelectorAll('.step').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelector(`.panel[data-panel="${el.dataset.step}"]`).classList.add('active');
+  });
+});
+function marcarEtapaConcluida(n){
+  const el = document.querySelector(`.step[data-step="${n}"]`);
+  if(el) el.classList.add('done');
+}
+
+/* ---------- PROFILE (etapas 1 e 2) ---------- */
+async function carregarProfile(){
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+  if(data){
+    profile = data;
+    if(profile.ddd) document.getElementById('input-ddd').value = profile.ddd;
+    if(profile.evolution_instance) document.getElementById('input-instance').value = profile.evolution_instance;
+    if(profile.evolution_api_url) document.getElementById('input-evo-url').value = profile.evolution_api_url;
+    if(profile.evolution_api_key) document.getElementById('input-evo-key').value = profile.evolution_api_key;
+    if(profile.foto_perfil_url){
+      const img = document.getElementById('avatar-preview');
+      img.src = profile.foto_perfil_url; img.style.display='block';
+      marcarEtapaConcluida(1);
+    }
+    if(profile.ddd) marcarEtapaConcluida(2);
+  }
+}
+
+document.getElementById('drop-avatar').onclick = ()=>document.getElementById('input-avatar').click();
+document.getElementById('input-avatar').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = document.getElementById('avatar-preview');
+    img.src = reader.result; img.style.display='block';
+    document.getElementById('drop-avatar').classList.add('filled');
+    document.getElementById('drop-avatar').textContent = file.name;
+  };
+  reader.readAsDataURL(file);
+};
+document.getElementById('save-avatar').onclick = async ()=>{
+  const file = document.getElementById('input-avatar').files[0];
+  if(!file){ toast('Selecione uma foto primeiro'); return; }
+  const url = await uploadArquivo('perfil', file);
+  await supabase.from('profiles').update({ foto_perfil_url: url }).eq('id', currentUser.id);
+  toast('Foto de perfil salva'); marcarEtapaConcluida(1);
+};
+
+document.getElementById('save-ddd').onclick = async ()=>{
+  const ddd = document.getElementById('input-ddd').value.trim();
+  const instance = document.getElementById('input-instance').value.trim();
+  const evoUrl = document.getElementById('input-evo-url').value.trim();
+  const evoKey = document.getElementById('input-evo-key').value.trim();
+  const { error } = await supabase.from('profiles').update({
+    ddd, evolution_instance: instance, evolution_api_url: evoUrl, evolution_api_key: evoKey
+  }).eq('id', currentUser.id);
+  if(error){ toast('Erro ao salvar: ' + error.message); return; }
+  profile = { ...profile, ddd, evolution_instance: instance, evolution_api_url: evoUrl, evolution_api_key: evoKey };
+  toast('Configuração salva'); marcarEtapaConcluida(2);
+  atualizarStatusEvo();
+};
+
+document.getElementById('test-evo').onclick = async ()=>{
+  if(!profile.evolution_api_url || !profile.evolution_instance || !profile.evolution_api_key){
+    toast('Preencha e salve os dados da Evolution API primeiro'); return;
+  }
+  try{
+    const resp = await fetch(`${profile.evolution_api_url}/instance/connectionState/${profile.evolution_instance}`, {
+      headers: { apikey: profile.evolution_api_key }
+    });
+    if(resp.ok){ toast('Conexão OK com a Evolution API'); atualizarStatusEvo(true); }
+    else{ toast('Falha na conexão (verifique URL/instância/apikey)'); atualizarStatusEvo(false); }
+  }catch(e){ toast('Não foi possível conectar: ' + e.message); atualizarStatusEvo(false); }
+};
+
+function atualizarStatusEvo(ok){
+  const dot = document.getElementById('evo-status-dot');
+  const txt = document.getElementById('evo-status-text');
+  if(ok === true){ dot.classList.add('ok'); txt.textContent = 'Evolution API conectada'; }
+  else if(ok === false){ dot.classList.remove('ok'); txt.textContent = 'Falha ao conectar'; }
+  else if(profile.evolution_api_url && profile.evolution_instance){ txt.textContent = 'Configurada — teste a conexão'; }
+}
+
+/* ---------- MÍDIA (etapa 3) ---------- */
+document.getElementById('drop-midia').onclick = ()=>document.getElementById('input-midia').click();
+document.getElementById('input-midia').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const tipo = document.getElementById('select-midia-tipo').value;
+  document.getElementById('drop-midia').classList.add('filled');
+  document.getElementById('drop-midia').textContent = file.name;
+  ['midia-preview-img','midia-preview-video','midia-preview-doc'].forEach(id=>document.getElementById(id).style.display='none');
+  if(tipo === 'image'){
+    const reader = new FileReader();
+    reader.onload = ()=>{ const el=document.getElementById('midia-preview-img'); el.src=reader.result; el.style.display='block'; };
+    reader.readAsDataURL(file);
+  } else if(tipo === 'video'){
+    const el = document.getElementById('midia-preview-video');
+    el.src = URL.createObjectURL(file); el.style.display='block';
+  } else {
+    const el = document.getElementById('midia-preview-doc');
+    el.textContent = `Documento selecionado: ${file.name} (${(file.size/1024).toFixed(0)} KB)`;
+    el.style.display = 'block';
+  }
+};
+document.getElementById('save-midia').onclick = async ()=>{
+  const file = document.getElementById('input-midia').files[0];
+  if(!file){ toast('Selecione um arquivo primeiro'); return; }
+  const tipo = document.getElementById('select-midia-tipo').value;
+  const url = await uploadArquivo('midias', file);
+  midiaAtual = { url, tipo, nomeArquivo: file.name };
+  toast('Mídia salva'); marcarEtapaConcluida(3);
+};
+
+/* ---------- MENSAGEM (etapa 4) ---------- */
+function montarPreview(){
+  const v2 = document.getElementById('input-var2').value || '{{2}}';
+  const v3 = document.getElementById('input-var3').value || '{{3}}';
+  const v4 = document.getElementById('input-var4').value || '{{4}}';
+  document.getElementById('template-preview').innerHTML =
+    `Olá <span class="tag">Nome do contato</span> !\n` +
+    `Temos uma novidade: ${escapeHtml(v2)}\n` +
+    `${escapeHtml(v3)}\n` +
+    `Para ${escapeHtml(v4)}, use o botão abaixo. ⬇️`;
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+['input-var2','input-var3','input-var4'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', montarPreview);
+});
+montarPreview();
+
+document.getElementById('save-mensagem').onclick = ()=>{
+  toast('Mensagem salva'); marcarEtapaConcluida(4);
+};
+
+/* ---------- LINK (etapa 5) ---------- */
+document.getElementById('save-link').onclick = ()=>{
+  const link = document.getElementById('input-link').value.trim();
+  if(!link){ toast('Informe um link'); return; }
+  toast('Link salvo'); marcarEtapaConcluida(5);
+};
+
+/* ---------- LISTA DE CONTATOS (etapa 6) ---------- */
+document.getElementById('drop-lista').onclick = ()=>document.getElementById('input-lista').click();
+document.getElementById('input-lista').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  document.getElementById('drop-lista').classList.add('filled');
+  document.getElementById('drop-lista').textContent = file.name;
+
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    let linhas = [];
+    if(file.name.endsWith('.csv')){
+      const texto = ev.target.result;
+      linhas = texto.split(/\r?\n/).filter(Boolean).map(l=>l.split(/[,;]/));
+    } else {
+      const wb = XLSX.read(ev.target.result, { type:'binary' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      linhas = XLSX.utils.sheet_to_json(sheet, { header:1 });
+    }
+    // detecta se a primeira linha é cabeçalho
+    let inicio = 0;
+    const cab = (linhas[0]||[]).map(c=>String(c).toLowerCase());
+    if(cab.includes('nome') || cab.includes('telefone')) inicio = 1;
+
+    contatosImportados = linhas.slice(inicio)
+      .filter(l=>l && l[1])
+      .map(l=>({ nome: String(l[0]||'').trim(), telefone: String(l[1]||'').replace(/\D/g,'') }));
+
+    document.getElementById('lista-resumo').textContent = `${contatosImportados.length} contatos encontrados`;
+    const tbody = document.getElementById('tabela-contatos-body');
+    tbody.innerHTML = contatosImportados.slice(0,50).map(c=>`<tr><td>${escapeHtml(c.nome)}</td><td class="mono">${escapeHtml(c.telefone)}</td></tr>`).join('');
+    document.getElementById('tabela-contatos').style.display = contatosImportados.length ? 'table' : 'none';
+  };
+  if(file.name.endsWith('.csv')) reader.readAsText(file); else reader.readAsBinaryString(file);
+};
+
+document.getElementById('save-lista').onclick = async ()=>{
+  const nome = document.getElementById('input-lista-nome').value.trim();
+  if(!nome){ toast('Dê um nome para a lista'); return; }
+  if(!contatosImportados.length){ toast('Importe um arquivo com contatos primeiro'); return; }
+
+  const { data: lista, error } = await supabase.from('listas')
+    .insert({ user_id: currentUser.id, nome, total_contatos: contatosImportados.length })
+    .select().single();
+  if(error){ toast('Erro ao salvar lista: ' + error.message); return; }
+  listaAtualId = lista.id;
+
+  const linhas = contatosImportados.map(c=>({ user_id: currentUser.id, lista_id: lista.id, nome: c.nome, telefone: c.telefone }));
+  // insere em lotes de 500
+  for(let i=0;i<linhas.length;i+=500){
+    await supabase.from('contatos').insert(linhas.slice(i, i+500));
+  }
+  toast('Lista salva com ' + contatosImportados.length + ' contatos'); marcarEtapaConcluida(6);
+};
+
+/* ---------- NÚMEROS DE TESTE (etapa 7) ---------- */
+async function carregarNumerosTeste(){
+  const { data } = await supabase.from('numeros_teste').select('*').eq('user_id', currentUser.id);
+  numerosTeste = data || [];
+  renderNumerosTeste();
+}
+function renderNumerosTeste(){
+  const el = document.getElementById('lista-teste-numeros');
+  el.innerHTML = numerosTeste.map(n=>`<span class="chip">${escapeHtml(n.telefone)}<button data-id="${n.id}">×</button></span>`).join('');
+  el.querySelectorAll('button').forEach(btn=>{
+    btn.onclick = async ()=>{
+      await supabase.from('numeros_teste').delete().eq('id', btn.dataset.id);
+      numerosTeste = numerosTeste.filter(n=>n.id !== btn.dataset.id);
+      renderNumerosTeste();
+    };
+  });
+}
+document.getElementById('add-teste-numero').onclick = async ()=>{
+  const input = document.getElementById('input-teste-numero');
+  const numero = input.value.replace(/\D/g,'');
+  if(!numero){ toast('Digite um número válido'); return; }
+  const { data, error } = await supabase.from('numeros_teste').insert({ user_id: currentUser.id, telefone: numero }).select().single();
+  if(error){ toast('Erro: ' + error.message); return; }
+  numerosTeste.push(data); renderNumerosTeste(); input.value = '';
+  marcarEtapaConcluida(7);
+};
+
+/* ---------- ENVIO (etapa 8) — dispara via webhook do n8n ----------
+   O n8n é quem chama a Evolution API de verdade: assim a apikey de
+   cada usuário nunca fica exposta no navegador, e o disparo continua
+   rodando no servidor mesmo se essa aba for fechada. */
+
+let logPollTimer = null;
+let logIdsVistos = new Set();
+
+function renderLogRow(row){
+  if(logIdsVistos.has(row.id)) return;
+  logIdsVistos.add(row.id);
+  const el = document.getElementById('envio-log');
+  const div = document.createElement('div');
+  div.className = 'log-row ' + row.status;
+  div.innerHTML = `<span class="mono">${escapeHtml(row.telefone||'')}</span><span>${row.status === 'enviado' ? 'enviado ✓' : 'erro'}</span>`;
+  el.prepend(div);
+}
+
+function iniciarAcompanhamentoLog(){
+  if(logPollTimer) clearInterval(logPollTimer);
+  logIdsVistos = new Set();
+  document.getElementById('envio-log').innerHTML = '';
+  logPollTimer = setInterval(async ()=>{
+    if(!campaignAtualId) return;
+    const { data } = await supabase.from('envios_log')
+      .select('*').eq('campaign_id', campaignAtualId)
+      .order('created_at', { ascending:false }).limit(200);
+    (data||[]).slice().reverse().forEach(renderLogRow);
+  }, 3000);
+  // para de checar sozinho depois de 10 minutos, por segurança
+  setTimeout(()=>{ if(logPollTimer) clearInterval(logPollTimer); }, 10*60*1000);
+}
+
+async function dispararViaN8n(modo){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ toast('Sessão expirada, faça login novamente'); return false; }
+  try{
+    const resp = await fetch(N8N_WEBHOOK_URL, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ campaign_id: campaignAtualId, modo })
+    });
+    if(!resp.ok){ toast('O n8n recusou a chamada (verifique a URL do webhook)'); return false; }
+    return true;
+  }catch(e){
+    toast('Não foi possível chamar o webhook do n8n: ' + e.message);
+    return false;
+  }
+}
+
+async function garantirCampanha(){
+  if(campaignAtualId) return campaignAtualId;
+  const { data, error } = await supabase.from('campaigns').insert({
+    user_id: currentUser.id,
+    nome: document.getElementById('input-lista-nome').value || 'Campanha sem nome',
+    midia_url: midiaAtual.url, midia_tipo: midiaAtual.tipo, midia_nome_arquivo: midiaAtual.nomeArquivo,
+    var2_novidade: document.getElementById('input-var2').value,
+    var3_texto: document.getElementById('input-var3').value,
+    var4_cta: document.getElementById('input-var4').value,
+    link_redirecionamento: document.getElementById('input-link').value,
+    lista_id: listaAtualId
+  }).select().single();
+  if(error){ toast('Erro ao criar campanha: ' + error.message); return null; }
+  campaignAtualId = data.id;
+  return campaignAtualId;
+}
+
+document.getElementById('btn-enviar-teste').onclick = async ()=>{
+  if(!validarAntesDeEnviar()) return;
+  if(!numerosTeste.length){ toast('Adicione ao menos um número de teste na etapa 7'); return; }
+  await garantirCampanha();
+  iniciarAcompanhamentoLog();
+  const ok = await dispararViaN8n('teste');
+  if(ok) toast('Envio de teste iniciado — acompanhe o log abaixo');
+};
+
+document.getElementById('btn-enviar-lista').onclick = async ()=>{
+  if(!validarAntesDeEnviar()) return;
+  if(!listaAtualId){ toast('Salve uma lista de contatos na etapa 6 primeiro'); return; }
+  if(!confirm('Confirma o disparo para toda a lista de contatos?')) return;
+  await garantirCampanha();
+  iniciarAcompanhamentoLog();
+  const ok = await dispararViaN8n('lista');
+  if(ok) toast('Disparo iniciado — acompanhe o log abaixo');
+};
+
+function validarAntesDeEnviar(){
+  if(!profile.evolution_api_url || !profile.evolution_instance || !profile.evolution_api_key){
+    toast('Configure a Evolution API na etapa 2'); return false;
+  }
+  if(!document.getElementById('input-var2').value){
+    toast('Preencha a mensagem na etapa 4'); return false;
+  }
+  return true;
+}
+</script>
+</body>
+</html>
