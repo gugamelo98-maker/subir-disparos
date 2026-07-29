@@ -477,7 +477,7 @@ function bootApp(){
    ========================================================= */
 const SUPABASE_URL = "https://sfjxgbkvnjfvzbguwwhf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmanhnYmt2bmpmdnpiZ3V3d2hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5NjM3MzAsImV4cCI6MjA4NDUzOTczMH0.JtlgLxwYEkvIZEqGqDUOi3vng2HAf9M34XayW4w6orA";
-const N8N_WEBHOOK = "https://SEU-N8N.dominio.com/webhook/painel-whatsapp";
+const N8N_WEBHOOK = "https://speedybarracuda-n8n.cloudfy.live/webhook/painel-whatsapp";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -509,15 +509,24 @@ async function uploadArquivo(bucket, file){
 
 // Todas as chamadas ao n8n passam por aqui: um webhook só, uma ação por chamada
 async function chamarN8n(acao, dados){
+  if(N8N_WEBHOOK.includes('SEU-N8N')){
+    throw new Error('a URL do n8n ainda não foi configurada — cole a URL do webhook "painel-whatsapp" na constante N8N_WEBHOOK no topo do index.html');
+  }
   const { data: { session } } = await supabase.auth.getSession();
   if(!session) throw new Error('Sessão expirada, faça login novamente');
-  const resp = await fetch(N8N_WEBHOOK, {
-    method:'POST',
-    headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
-    body: JSON.stringify({ acao, ...(dados||{}) })
-  });
+  let resp;
+  try{
+    resp = await fetch(N8N_WEBHOOK, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ acao, ...(dados||{}) })
+    });
+  }catch(e){
+    throw new Error('não foi possível alcançar o n8n. Verifique: (1) a URL em N8N_WEBHOOK está certa? (2) o workflow está ATIVO no n8n (chave verde ligada)? (3) no node Webhook do n8n, em Options → Allowed Origins (CORS), está "*"?');
+  }
   let corpo = null;
   try{ corpo = await resp.json(); }catch(e){}
+  if(resp.status === 404) throw new Error('o n8n respondeu 404 — o workflow provavelmente não está ATIVO (a URL de produção /webhook/ só funciona com o workflow ativado; a de teste /webhook-test/ só funciona com o editor aberto escutando)');
   if(!resp.ok) throw new Error((corpo && corpo.erro) || ('o n8n respondeu ' + resp.status));
   if(corpo && corpo.erro) throw new Error(corpo.erro);
   return corpo;
