@@ -200,17 +200,18 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
-      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 8</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 9</div>
 
       <ul class="steps" id="steps-nav">
-        <li class="step active" data-step="1"><span class="dot">1</span>Foto de perfil</li>
-        <li class="step" data-step="2"><span class="dot">2</span>DDD</li>
-        <li class="step" data-step="3"><span class="dot">3</span>Vídeo ou imagem</li>
-        <li class="step" data-step="4"><span class="dot">4</span>Mensagem</li>
-        <li class="step" data-step="5"><span class="dot">5</span>Link de redirecionamento</li>
-        <li class="step" data-step="6"><span class="dot">6</span>Lista de contatos</li>
-        <li class="step" data-step="7"><span class="dot">7</span>Números de teste</li>
-        <li class="step" data-step="8"><span class="dot">8</span>Enviar</li>
+        <li class="step active" data-step="nicho"><span class="dot">1</span>Nicho</li>
+        <li class="step" data-step="1"><span class="dot">2</span>Foto de perfil</li>
+        <li class="step" data-step="2"><span class="dot">3</span>Perfil e DDD</li>
+        <li class="step" data-step="3"><span class="dot">4</span>Vídeo ou imagem</li>
+        <li class="step" data-step="4"><span class="dot">5</span>Mensagem</li>
+        <li class="step" data-step="5"><span class="dot">6</span>Link de redirecionamento</li>
+        <li class="step" data-step="6"><span class="dot">7</span>Lista de contatos</li>
+        <li class="step" data-step="7"><span class="dot">8</span>Números de teste</li>
+        <li class="step" data-step="8"><span class="dot">9</span>Enviar</li>
         <li class="step" data-step="admin" id="nav-admin" style="display:none;border-top:1px solid #26332C;margin-top:8px;padding-top:16px;"><span class="dot">★</span>Gerenciar acessos</li>
       </ul>
 
@@ -222,9 +223,33 @@
     <!-- MAIN -->
     <main class="main">
 
-      <!-- STEP 1: FOTO DE PERFIL -->
-      <section class="panel active" data-panel="1">
+      <!-- STEP NICHO -->
+      <section class="panel active" data-panel="nicho">
         <div class="eyebrow">Etapa 1</div>
+        <h2>Nicho</h2>
+        <p class="desc">O nicho define o preço por contato do seu orçamento.</p>
+        <div class="card">
+          <div class="field-block">
+            <label>Selecione o nicho da campanha</label>
+            <select id="select-nicho">
+              <option value="">Selecione...</option>
+              <option value="corban & cobrança">Corban &amp; Cobrança</option>
+              <option value="rifa">Rifa</option>
+              <option value="ob">OB</option>
+              <option value="bet">Bet</option>
+              <option value="politica">Política</option>
+            </select>
+            <div class="hint" id="nicho-preco-hint"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="save-nicho">Salvar nicho</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 1: FOTO DE PERFIL -->
+      <section class="panel" data-panel="1">
+        <div class="eyebrow">Etapa 2</div>
         <h2>Foto de perfil</h2>
         <p class="desc">Essa é a foto que aparece na instância conectada à Evolution API.</p>
         <div class="card">
@@ -239,7 +264,7 @@
 
       <!-- STEP 2: DDD -->
       <section class="panel" data-panel="2">
-        <div class="eyebrow">Etapa 2</div>
+        <div class="eyebrow">Etapa 3</div>
         <h2>Perfil e DDD</h2>
         <p class="desc">O nome que aparece no perfil do WhatsApp e o DDD dos números.</p>
         <div class="card">
@@ -259,7 +284,7 @@
 
       <!-- STEP 3: VIDEO OU IMAGEM -->
       <section class="panel" data-panel="3">
-        <div class="eyebrow">Etapa 3</div>
+        <div class="eyebrow">Etapa 4</div>
         <h2>Vídeo ou imagem da campanha</h2>
         <p class="desc">Mídia enviada junto com a mensagem. Também aceita arquivos ZIP ou Excel como documento anexo.</p>
         <div class="card">
@@ -284,7 +309,7 @@
 
       <!-- STEP 4: MENSAGEM -->
       <section class="panel" data-panel="4">
-        <div class="eyebrow">Etapa 4</div>
+        <div class="eyebrow">Etapa 5</div>
         <h2>Mensagem</h2>
         <p class="desc">Preencha as 4 variáveis do modelo.</p>
         <div class="card">
@@ -316,7 +341,7 @@
 
       <!-- STEP 5: LINK -->
       <section class="panel" data-panel="5">
-        <div class="eyebrow">Etapa 5</div>
+        <div class="eyebrow">Etapa 6</div>
         <h2>Link de redirecionamento</h2>
         <p class="desc">Aparece no botão/rodapé da mensagem enviada.</p>
         <div class="card">
@@ -332,7 +357,7 @@
 
       <!-- STEP 6: LISTA DE CONTATOS -->
       <section class="panel" data-panel="6">
-        <div class="eyebrow">Etapa 6</div>
+        <div class="eyebrow">Etapa 7</div>
         <h2>Lista de contatos</h2>
         <p class="desc">Envie um CSV ou Excel com as colunas <span class="mono">nome</span> e <span class="mono">telefone</span>.</p>
         <div class="card">
@@ -343,6 +368,7 @@
           <div class="dropzone" id="drop-lista">Clique para enviar o arquivo (.csv, .xlsx)</div>
           <input type="file" id="input-lista" accept=".csv,.xlsx,.xls" style="display:none">
           <div id="lista-resumo" class="hint"></div>
+          <div id="orcamento-lista" class="template-preview" style="display:none;margin-top:12px;padding:12px 16px;"></div>
           <table class="contatos" id="tabela-contatos" style="display:none;">
             <thead><tr><th>Nome</th><th>Telefone</th></tr></thead>
             <tbody id="tabela-contatos-body"></tbody>
@@ -355,7 +381,7 @@
 
       <!-- STEP 7: NÚMEROS DE TESTE -->
       <section class="panel" data-panel="7">
-        <div class="eyebrow">Etapa 7</div>
+        <div class="eyebrow">Etapa 8</div>
         <h2>Números de teste</h2>
         <p class="desc">Use para validar a mensagem antes do disparo em massa.</p>
         <div class="card">
@@ -370,10 +396,18 @@
 
       <!-- STEP 8: ENVIAR -->
       <section class="panel" data-panel="8">
-        <div class="eyebrow">Etapa 8</div>
+        <div class="eyebrow">Etapa 9</div>
         <h2>Enviar para o grupo</h2>
         <p class="desc">A demanda completa (perfil, DDD, mídia, mensagem, link, lista e números de teste) vai para o grupo vinculado ao seu acesso.</p>
         <div class="card">
+          <div class="field-block">
+            <label>Orçamento</label>
+            <div id="orcamento-envio" class="template-preview" style="padding:12px 16px;">Suba a lista de contatos e selecione o nicho para calcular.</div>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400;cursor:pointer;">
+              <input type="checkbox" id="check-aprovar-orcamento" style="width:16px;height:16px;">
+              Aprovo o orçamento acima
+            </label>
+          </div>
           <div class="field-block">
             <label>Seu grupo</label>
             <div id="grupo-vinculado" class="template-preview" style="padding:12px 16px;">Carregando...</div>
@@ -435,6 +469,19 @@
         </div>
 
         <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Tabela de preços por nicho</h3>
+          <p class="hint" style="margin-top:-4px;">Preço por contato, definido por cliente. O orçamento do cliente é calculado com esses valores.</p>
+          <div class="field-block">
+            <label>Cliente</label>
+            <select id="precos-cliente"></select>
+          </div>
+          <div id="precos-campos"></div>
+          <div class="btn-row">
+            <button class="btn btn-solid" id="btn-salvar-precos">Salvar preços</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h3 style="margin-top:0;font-size:15px;">Usuários com acesso</h3>
           <p class="hint" style="margin-top:-4px;">Vincule um grupo a cada usuário — na etapa Enviar, ele só verá esse grupo, sem risco de mandar pro lugar errado.</p>
           <table class="contatos" id="admin-tabela-usuarios">
@@ -490,6 +537,9 @@ let contatosImportados = [];
 let listaAtualId = null;
 let numerosTeste = [];
 let campaignAtualId = null;
+let nichoAtual = '';
+let precosCliente = {};   // { nicho: preco_por_contato }
+const NICHOS = ['corban & cobrança','rifa','ob','bet','politica'];
 
 /* ---------- helpers ---------- */
 function toast(msg){
@@ -649,6 +699,7 @@ function chaveRascunho(){ return 'demanda_rascunho_' + (currentUser ? currentUse
 function salvarRascunho(){
   try{
     localStorage.setItem(chaveRascunho(), JSON.stringify({
+      nicho: nichoAtual,
       v1: document.getElementById('input-var1').value,
       v2: document.getElementById('input-var2').value,
       v3: document.getElementById('input-var3').value,
@@ -665,6 +716,12 @@ function restaurarRascunho(){
   try{
     const r = JSON.parse(localStorage.getItem(chaveRascunho()) || 'null');
     if(!r) return;
+    if(r.nicho){
+      nichoAtual = r.nicho;
+      document.getElementById('select-nicho').value = r.nicho;
+      document.getElementById('select-nicho').dispatchEvent(new Event('change'));
+      marcarEtapaConcluida('nicho');
+    }
     document.getElementById('input-var1').value = r.v1 || '';
     document.getElementById('input-var2').value = r.v2 || '';
     document.getElementById('input-var3').value = r.v3 || '';
@@ -712,9 +769,11 @@ async function bootAfterLogin(novoLogin){
   document.getElementById('rail-user-email').textContent = user.email;
   if(novoLogin) await registrarAcesso();
   await carregarProfile();
+  await carregarPrecosCliente();
   await carregarNumerosTeste();
   restaurarRascunho();
   mostrarGrupoVinculado();
+  calcularOrcamento();
 }
 
 (async function initSession(){
@@ -881,6 +940,7 @@ document.getElementById('input-lista').onchange = (e)=>{
     const tbody = document.getElementById('tabela-contatos-body');
     tbody.innerHTML = contatosImportados.slice(0,50).map(c=>`<tr><td>${escapeHtml(c.nome)}</td><td class="mono">${escapeHtml(c.telefone)}</td></tr>`).join('');
     document.getElementById('tabela-contatos').style.display = contatosImportados.length ? 'table' : 'none';
+    calcularOrcamento();
   };
   if(file.name.endsWith('.csv')) reader.readAsText(file); else reader.readAsBinaryString(file);
 };
@@ -935,6 +995,72 @@ document.getElementById('add-teste-numero').onclick = async ()=>{
   if(error){ toast('Erro: ' + error.message); return; }
   numerosTeste.push(data); renderNumerosTeste(); input.value = '';
   marcarEtapaConcluida(7);
+};
+
+
+/* ---------- NICHO E ORÇAMENTO ---------- */
+async function carregarPrecosCliente(){
+  const { data } = await supabase.from('precos_nicho').select('*').eq('user_id', currentUser.id);
+  precosCliente = {};
+  (data||[]).forEach(p => { precosCliente[p.nicho] = parseFloat(p.preco_por_contato); });
+}
+
+function precoDoNicho(){
+  return nichoAtual && precosCliente[nichoAtual] !== undefined ? precosCliente[nichoAtual] : null;
+}
+
+function fmtReal(v){ return 'R$ ' + v.toFixed(2).replace('.', ','); }
+
+function calcularOrcamento(){
+  const total = contatosImportados.length;
+  const preco = precoDoNicho();
+  const boxLista = document.getElementById('orcamento-lista');
+  const boxEnvio = document.getElementById('orcamento-envio');
+  const check = document.getElementById('check-aprovar-orcamento');
+
+  if(!nichoAtual){
+    boxLista.style.display = total ? 'block' : 'none';
+    boxLista.textContent = 'Selecione o nicho na etapa 1 para calcular o valor.';
+    boxEnvio.textContent = 'Selecione o nicho na etapa 1 para calcular o orçamento.';
+    check.checked = false;
+    return;
+  }
+  if(preco === null){
+    boxLista.style.display = 'block';
+    boxLista.textContent = 'Sem preço definido para o nicho "' + nichoAtual + '" — peça ao administrador para cadastrar.';
+    boxEnvio.textContent = boxLista.textContent;
+    check.checked = false;
+    return;
+  }
+  if(!total){
+    boxLista.style.display = 'none';
+    boxEnvio.textContent = 'Suba a lista de contatos (etapa 7) para calcular o orçamento.';
+    check.checked = false;
+    return;
+  }
+  const valor = total * preco;
+  const texto = `Nicho: ${nichoAtual}\nContatos: ${total} × ${fmtReal(preco)} = ${fmtReal(valor)}`;
+  boxLista.style.display = 'block';
+  boxLista.textContent = texto;
+  boxEnvio.textContent = texto;
+}
+
+document.getElementById('select-nicho').addEventListener('change', ()=>{
+  nichoAtual = document.getElementById('select-nicho').value;
+  const hint = document.getElementById('nicho-preco-hint');
+  const preco = precoDoNicho();
+  if(!nichoAtual) hint.textContent = '';
+  else if(preco === null) hint.textContent = 'Sem preço definido para este nicho — peça ao administrador para cadastrar.';
+  else hint.textContent = 'Preço por contato: ' + fmtReal(preco);
+  document.getElementById('check-aprovar-orcamento').checked = false;
+  calcularOrcamento();
+  salvarRascunho();
+});
+
+document.getElementById('save-nicho').onclick = ()=>{
+  if(!nichoAtual){ toast('Selecione um nicho'); return; }
+  salvarRascunho();
+  toast('Nicho salvo'); marcarEtapaConcluida('nicho');
 };
 
 /* ---------- ENVIO (etapa 8) — demanda vai para o GRUPO VINCULADO ao usuário ----------
@@ -996,7 +1122,12 @@ async function garantirCampanha(){
     link_redirecionamento: document.getElementById('input-link').value,
     lista_id: listaAtualId,
     grupo_id: profile.grupo_id,
-    grupo_nome: profile.grupo_nome
+    grupo_nome: profile.grupo_nome,
+    nicho: nichoAtual,
+    total_contatos: contatosImportados.length,
+    preco_unitario: precoDoNicho() || 0,
+    valor_total: (precoDoNicho() || 0) * contatosImportados.length,
+    orcamento_aprovado: true
   }).select().single();
   if(error){ toast('Erro ao salvar a demanda: ' + error.message); return null; }
   campaignAtualId = data.id;
@@ -1033,6 +1164,14 @@ async function novaDemanda(){
   const dropA = document.getElementById('drop-avatar');
   dropA.classList.remove('filled');
   dropA.textContent = 'Clique para enviar uma imagem (JPG ou PNG)';
+
+  // nicho e orçamento
+  nichoAtual = '';
+  document.getElementById('select-nicho').value = '';
+  document.getElementById('nicho-preco-hint').textContent = '';
+  document.getElementById('check-aprovar-orcamento').checked = false;
+  document.getElementById('orcamento-lista').style.display = 'none';
+  document.getElementById('orcamento-envio').textContent = 'Suba a lista de contatos e selecione o nicho para calcular.';
 
   // mensagem, link e lista (campos)
   ['input-var1','input-var2','input-var3','input-var4','input-link','input-lista-nome'].forEach(id=>{
@@ -1072,12 +1211,12 @@ async function novaDemanda(){
   try{ localStorage.removeItem(chaveRascunho()); }catch(e){}
 
   // desmarca todas as etapas e volta pro início
-  [1,2,3,4,5,6,7,8].forEach(n=>{
+  ['nicho',1,2,3,4,5,6,7,8].forEach(n=>{
     const el = document.querySelector(`.step[data-step="${n}"]`);
     if(el) el.classList.remove('done');
   });
 
-  irParaEtapa(1);
+  irParaEtapa('nicho');
 }
 
 document.getElementById('btn-limpar-tudo').onclick = async ()=>{
@@ -1088,8 +1227,14 @@ document.getElementById('btn-limpar-tudo').onclick = async ()=>{
 
 document.getElementById('btn-enviar-demanda').onclick = async ()=>{
   if(!profile.grupo_id){ toast('Nenhum grupo vinculado ao seu acesso'); return; }
+  if(!nichoAtual){ toast('Selecione o nicho na etapa 1'); return; }
+  if(precoDoNicho() === null){ toast('Sem preço definido para o nicho "' + nichoAtual + '" — peça ao administrador'); return; }
+  if(!contatosImportados.length && !listaAtualId){ toast('Suba a lista de contatos na etapa 7 para gerar o orçamento'); return; }
+  if(!document.getElementById('check-aprovar-orcamento').checked){
+    toast('Marque "Aprovo o orçamento acima" para enviar'); return;
+  }
   if(!document.getElementById('input-var2').value){
-    toast('Preencha a mensagem na etapa 4'); return;
+    toast('Preencha a mensagem na etapa 5'); return;
   }
 
   // conferência do que vai na demanda — evita envio vazio sem perceber
@@ -1100,7 +1245,11 @@ document.getElementById('btn-enviar-demanda').onclick = async ()=>{
   (document.getElementById('input-link').value.trim() ? vai : falta).push('link');
   (listaAtualId ? vai : falta).push('lista de contatos');
   (numerosTeste.length ? vai : falta).push('números de teste');
-  let msg = 'A demanda vai para: ' + (profile.grupo_nome || profile.grupo_id) + '\n\n✔ Incluído: ' + (vai.join(', ') || 'nada');
+  const valorTotal = (precoDoNicho() || 0) * contatosImportados.length;
+  let msg = 'A demanda vai para: ' + (profile.grupo_nome || profile.grupo_id)
+    + '\nNicho: ' + nichoAtual
+    + '\nOrçamento APROVADO: ' + contatosImportados.length + ' contatos × ' + fmtReal(precoDoNicho() || 0) + ' = ' + fmtReal(valorTotal)
+    + '\n\n✔ Incluído: ' + (vai.join(', ') || 'nada');
   if(falta.length) msg += '\n\n✖ FALTANDO: ' + falta.join(', ') + '\n\nEnviar mesmo assim?';
   else msg += '\n\nEnviar?';
   if(!confirm(msg)) return;
@@ -1144,6 +1293,8 @@ function opcoesGrupos(selecionado){
 async function carregarUsuariosAdmin(){
   const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending:false });
   if(error){ toast('Erro ao carregar usuários: ' + error.message); return; }
+  usuariosAdminCache = data || [];
+  preencherSelectClientes();
   const tbody = document.getElementById('admin-tabela-usuarios-body');
   tbody.innerHTML = (data||[]).map(u => `
     <tr data-uid="${u.id}">
@@ -1189,6 +1340,51 @@ async function carregarUsuariosAdmin(){
     };
   });
 }
+
+
+/* ---------- ADMIN: TABELA DE PREÇOS POR NICHO ---------- */
+let usuariosAdminCache = [];
+
+function montarCamposPrecos(precos){
+  const area = document.getElementById('precos-campos');
+  area.innerHTML = NICHOS.map(n => `
+    <div class="row" style="align-items:center;margin-bottom:8px;">
+      <div style="flex:1;text-transform:capitalize;">${escapeHtml(n)}</div>
+      <div style="width:160px;"><input type="number" step="0.01" min="0" class="preco-nicho-input" data-nicho="${escapeHtml(n)}"
+        value="${precos[n] !== undefined ? precos[n] : ''}" placeholder="R$ por contato"
+        style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;"></div>
+    </div>`).join('');
+}
+
+async function carregarPrecosDoCliente(uid){
+  const { data } = await supabase.from('precos_nicho').select('*').eq('user_id', uid);
+  const precos = {};
+  (data||[]).forEach(p => { precos[p.nicho] = parseFloat(p.preco_por_contato); });
+  montarCamposPrecos(precos);
+}
+
+function preencherSelectClientes(){
+  const sel = document.getElementById('precos-cliente');
+  sel.innerHTML = usuariosAdminCache.map(u =>
+    `<option value="${u.id}">${escapeHtml(u.nome || u.email || u.id)}</option>`).join('');
+  if(usuariosAdminCache.length) carregarPrecosDoCliente(sel.value);
+  sel.onchange = ()=> carregarPrecosDoCliente(sel.value);
+}
+
+document.getElementById('btn-salvar-precos').onclick = async ()=>{
+  const uid = document.getElementById('precos-cliente').value;
+  if(!uid){ toast('Selecione um cliente'); return; }
+  const linhas = [];
+  document.querySelectorAll('.preco-nicho-input').forEach(inp => {
+    const v = parseFloat(inp.value);
+    if(!isNaN(v)) linhas.push({ user_id: uid, nicho: inp.dataset.nicho, preco_por_contato: v });
+  });
+  if(!linhas.length){ toast('Preencha ao menos um preço'); return; }
+  const { error } = await supabase.from('precos_nicho').upsert(linhas, { onConflict: 'user_id,nicho' });
+  if(error){ toast('Erro ao salvar preços: ' + error.message); return; }
+  toast('Preços salvos para o cliente');
+  if(uid === currentUser.id){ await carregarPrecosCliente(); calcularOrcamento(); }
+};
 
 document.getElementById('btn-verificar-conexao').onclick = async ()=>{
   const statusEl = document.getElementById('evo-conexao-status');
