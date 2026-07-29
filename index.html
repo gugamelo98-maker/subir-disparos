@@ -200,7 +200,7 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
-      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 9</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 10</div>
 
       <ul class="steps" id="steps-nav">
         <li class="step active" data-step="nicho"><span class="dot">1</span>Nicho</li>
@@ -487,6 +487,15 @@
           <table class="contatos" id="admin-tabela-usuarios">
             <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Grupo vinculado</th><th>Ações</th></tr></thead>
             <tbody id="admin-tabela-usuarios-body"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Últimos envios (todas as demandas)</h3>
+          <p class="hint" style="margin-top:-4px;">Itens com erro mostram o motivo — é aqui que aparece por que um grupo não recebeu.</p>
+          <table class="contatos">
+            <thead><tr><th>Cliente</th><th>Item</th><th>Status</th><th>Detalhe</th><th>Quando</th></tr></thead>
+            <tbody id="admin-tabela-envios-body"></tbody>
           </table>
         </div>
 
@@ -810,7 +819,7 @@ async function carregarProfile(){
     if(profile.ddd) marcarEtapaConcluida(2);
     if(profile.is_admin){
       document.getElementById('nav-admin').style.display = 'block';
-      carregarGruposAdmin().then(carregarUsuariosAdmin);
+      carregarGruposAdmin().then(carregarUsuariosAdmin).then(carregarEnviosAdmin);
       carregarAcessosAdmin();
     }
   }
@@ -1304,6 +1313,7 @@ async function carregarUsuariosAdmin(){
       <td><select class="sel-grupo-usuario" style="width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;">${opcoesGrupos(u.grupo_id)}</select></td>
       <td style="white-space:nowrap;">
         <button class="btn btn-vincular" style="padding:6px 10px;font-size:12px;">Salvar grupo</button>
+        <button class="btn btn-testar-grupo" style="padding:6px 10px;font-size:12px;">Testar</button>
         ${u.id !== currentUser.id ? '<button class="btn btn-excluir" style="padding:6px 10px;font-size:12px;color:var(--red);border-color:var(--red);">Excluir</button>' : ''}
       </td>
     </tr>
@@ -1322,6 +1332,21 @@ async function carregarUsuariosAdmin(){
       if(error){ toast('Erro ao vincular: ' + error.message); return; }
       toast(grupoId ? 'Grupo vinculado' : 'Vínculo removido');
       if(uid === currentUser.id){ profile.grupo_id = grupoId || null; profile.grupo_nome = grupoNome; mostrarGrupoVinculado(); }
+    };
+
+    tr.querySelector('.btn-testar-grupo').onclick = async ()=>{
+      const grupoId = sel.value;
+      if(!grupoId){ toast('Selecione um grupo para testar'); return; }
+      const b = tr.querySelector('.btn-testar-grupo');
+      b.disabled = true; b.textContent = '...';
+      try{
+        await chamarN8n('testar-grupo', { grupo_id: grupoId });
+        toast('Mensagem de teste enviada — confira no grupo');
+      }catch(e){
+        alert('Falha no teste deste grupo:\n\n' + e.message + '\n\nCausas comuns: o número central saiu do grupo, ou o grupo foi recriado (o ID mudou — recarregue a página e vincule de novo).');
+      }finally{
+        b.disabled = false; b.textContent = 'Testar';
+      }
     };
 
     const btnExcluir = tr.querySelector('.btn-excluir');
@@ -1414,6 +1439,24 @@ document.getElementById('btn-verificar-conexao').onclick = async ()=>{
     btn.disabled = false; btn.textContent = 'Verificar';
   }
 };
+
+
+async function carregarEnviosAdmin(){
+  const { data } = await supabase.from('envios_log')
+    .select('*').order('created_at', { ascending:false }).limit(60);
+  const porId = {};
+  usuariosAdminCache.forEach(u => porId[u.id] = u.nome || u.email || u.id.slice(0,8));
+  const tbody = document.getElementById('admin-tabela-envios-body');
+  tbody.innerHTML = (data||[]).map(e => `
+    <tr>
+      <td>${escapeHtml(porId[e.user_id] || e.user_id.slice(0,8))}</td>
+      <td>${escapeHtml(e.telefone || '—')}</td>
+      <td style="color:${e.status === 'enviado' ? 'var(--jade-dark)' : 'var(--red)'};font-weight:600;">${escapeHtml(e.status || '—')}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(e.detalhe || '')}">${escapeHtml((e.detalhe || '—').slice(0,80))}</td>
+      <td>${new Date(e.created_at).toLocaleString('pt-BR')}</td>
+    </tr>
+  `).join('');
+}
 
 async function carregarAcessosAdmin(){
   const { data, error } = await supabase.from('acessos_log')
