@@ -460,13 +460,25 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ---------- Diagnóstico visível: qualquer erro de JS aparece na tela ---------- */
+window.onerror = function(msg, src, line){
+  var el = document.getElementById('erro-overlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'erro-overlay';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#D6564A;color:#fff;padding:12px 16px;font:13px monospace;z-index:9999;white-space:pre-wrap;';
+    document.body.appendChild(el);
+  }
+  el.textContent = 'Erro no site: ' + msg + ' (linha ' + line + ')';
+};
+
+function bootApp(){
+
 /* =========================================================
    CONFIGURAÇÃO — troque pelos dados do seu projeto Supabase
    ========================================================= */
 const SUPABASE_URL = "https://sfjxgbkvnjfvzbguwwhf.supabase.co";
-// COLE AQUI A CHAVE "anon / public" (Project Settings → API).
-// NUNCA cole a service_role aqui — ela dá acesso total ao banco para qualquer visitante do site.
-const SUPABASE_ANON_KEY = "SUA_ANON_KEY_AQUI";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmanhnYmt2bmpmdnpiZ3V3d2hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5NjM3MzAsImV4cCI6MjA4NDUzOTczMH0.JtlgLxwYEkvIZEqGqDUOi3vng2HAf9M34XayW4w6orA";
 const N8N_WEBHOOK_URL = "https://SEU-N8N.dominio.com/webhook/disparo-whatsapp";
 const N8N_WEBHOOK_CRIAR_USUARIO = "https://SEU-N8N.dominio.com/webhook/criar-usuario";
 
@@ -1043,6 +1055,28 @@ document.getElementById('admin-criar-usuario').onclick = async ()=>{
     btn.disabled = false; btn.textContent = 'Criar acesso';
   }
 };
+
+} /* fim bootApp */
+
+/* ---------- Carregador da biblioteca do Supabase, com fallback ----------
+   O CDN principal (jsdelivr) pode estar bloqueado em alguns ambientes —
+   por exemplo, a pré-visualização de HTML dentro do Claude bloqueia tudo
+   que não for cdnjs. Nesses casos tentamos o unpkg e, se nada funcionar,
+   explicamos na tela em vez de falhar em silêncio. ---------- */
+(function garantirSupabase(){
+  function erroLib(){
+    var msg = document.getElementById('auth-msg');
+    var texto = 'A biblioteca do Supabase não carregou. Se você está vendo esta página dentro da pré-visualização do Claude, ela bloqueia o CDN — baixe o index.html e abra no navegador (dois cliques no arquivo) ou hospede no Netlify/Vercel. Se já está no navegador, verifique sua internet.';
+    if(msg){ msg.style.color = '#E8A33D'; msg.textContent = texto; } else { alert(texto); }
+  }
+  function pronto(){ return window.supabase && window.supabase.createClient; }
+  if(pronto()){ bootApp(); return; }
+  var alt = document.createElement('script');
+  alt.src = 'https://unpkg.com/@supabase/supabase-js@2';
+  alt.onload = function(){ pronto() ? bootApp() : erroLib(); };
+  alt.onerror = erroLib;
+  document.head.appendChild(alt);
+})();
 </script>
 </body>
 </html>
