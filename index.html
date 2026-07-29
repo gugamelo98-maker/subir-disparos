@@ -371,17 +371,12 @@
       <section class="panel" data-panel="8">
         <div class="eyebrow">Etapa 8</div>
         <h2>Enviar para o grupo</h2>
-        <p class="desc">Escolha o seu grupo de WhatsApp — a demanda completa (perfil, DDD, mídia, mensagem, link, lista e números de teste) será enviada nele.</p>
+        <p class="desc">A demanda completa (perfil, DDD, mídia, mensagem, link, lista e números de teste) vai para o grupo vinculado ao seu acesso.</p>
         <div class="card">
           <div class="field-block">
-            <label>Grupo de WhatsApp</label>
-            <div class="row">
-              <select id="select-grupo" style="flex:1;">
-                <option value="">Carregando grupos...</option>
-              </select>
-              <button class="btn" id="btn-recarregar-grupos" title="Recarregar grupos">↻</button>
-            </div>
-            <div class="hint">Não achou o grupo? O número conectado à Evolution API precisa estar dentro dele.</div>
+            <label>Seu grupo</label>
+            <div id="grupo-vinculado" class="template-preview" style="padding:12px 16px;">Carregando...</div>
+            <div class="hint" id="grupo-vinculado-hint"></div>
           </div>
           <div class="btn-row">
             <button class="btn btn-solid" id="btn-enviar-demanda">Enviar demanda para o grupo</button>
@@ -425,9 +420,23 @@
         </div>
 
         <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">Conexão com o WhatsApp (Evolution API)</h3>
+          <p class="hint" style="margin-top:-4px;">O número conectado aqui é quem envia as demandas — ele precisa estar dentro dos grupos dos clientes.</p>
+          <div class="row" style="align-items:center;">
+            <div id="evo-conexao-status" class="hint" style="flex:1;">Clique em "Verificar" para checar a conexão.</div>
+            <button class="btn" id="btn-verificar-conexao">Verificar</button>
+          </div>
+          <div id="evo-qr-area" style="display:none;margin-top:14px;text-align:center;">
+            <p class="hint">Instância desconectada. Abra o WhatsApp → Aparelhos conectados → Conectar aparelho, e escaneie:</p>
+            <img id="evo-qr-img" style="max-width:260px;border:1px solid var(--line);border-radius:10px;">
+          </div>
+        </div>
+
+        <div class="card">
           <h3 style="margin-top:0;font-size:15px;">Usuários com acesso</h3>
+          <p class="hint" style="margin-top:-4px;">Vincule um grupo a cada usuário — na etapa Enviar, ele só verá esse grupo, sem risco de mandar pro lugar errado.</p>
           <table class="contatos" id="admin-tabela-usuarios">
-            <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Admin</th></tr></thead>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Grupo vinculado</th><th>Ações</th></tr></thead>
             <tbody id="admin-tabela-usuarios-body"></tbody>
           </table>
         </div>
@@ -468,9 +477,7 @@ function bootApp(){
    ========================================================= */
 const SUPABASE_URL = "https://sfjxgbkvnjfvzbguwwhf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmanhnYmt2bmpmdnpiZ3V3d2hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5NjM3MzAsImV4cCI6MjA4NDUzOTczMH0.JtlgLxwYEkvIZEqGqDUOi3vng2HAf9M34XayW4w6orA";
-const N8N_WEBHOOK_LISTAR_GRUPOS = "https://SEU-N8N.dominio.com/webhook/listar-grupos";
-const N8N_WEBHOOK_ENVIAR_DEMANDA = "https://SEU-N8N.dominio.com/webhook/enviar-demanda";
-const N8N_WEBHOOK_CRIAR_USUARIO = "https://SEU-N8N.dominio.com/webhook/criar-usuario";
+const N8N_WEBHOOK = "https://SEU-N8N.dominio.com/webhook/painel-whatsapp";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -498,6 +505,22 @@ async function uploadArquivo(bucket, file){
   if(error){ toast('Erro no upload: ' + error.message); throw error; }
   const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 60*60*24*7);
   return signed ? signed.signedUrl : path;
+}
+
+// Todas as chamadas ao n8n passam por aqui: um webhook só, uma ação por chamada
+async function chamarN8n(acao, dados){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session) throw new Error('Sessão expirada, faça login novamente');
+  const resp = await fetch(N8N_WEBHOOK, {
+    method:'POST',
+    headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+    body: JSON.stringify({ acao, ...(dados||{}) })
+  });
+  let corpo = null;
+  try{ corpo = await resp.json(); }catch(e){}
+  if(!resp.ok) throw new Error((corpo && corpo.erro) || ('o n8n respondeu ' + resp.status));
+  if(corpo && corpo.erro) throw new Error(corpo.erro);
+  return corpo;
 }
 
 /* ---------- AUTH ---------- */
@@ -627,7 +650,7 @@ async function bootAfterLogin(novoLogin){
   if(novoLogin) await registrarAcesso();
   await carregarProfile();
   await carregarNumerosTeste();
-  carregarGrupos();
+  mostrarGrupoVinculado();
 }
 
 (async function initSession(){
@@ -664,7 +687,7 @@ async function carregarProfile(){
     if(profile.ddd) marcarEtapaConcluida(2);
     if(profile.is_admin){
       document.getElementById('nav-admin').style.display = 'block';
-      carregarUsuariosAdmin();
+      carregarGruposAdmin().then(carregarUsuariosAdmin);
       carregarAcessosAdmin();
     }
   }
@@ -846,15 +869,13 @@ document.getElementById('add-teste-numero').onclick = async ()=>{
   marcarEtapaConcluida(7);
 };
 
-/* ---------- ENVIO (etapa 8) — envia a DEMANDA para o grupo de WhatsApp ----------
-   O site não dispara para lista de contatos. Ele empacota tudo que o cliente
-   preencheu (perfil, DDD, mídia, mensagem, link, lista, números de teste) e
-   envia para o GRUPO escolhido, via webhook do n8n. A Evolution API é uma só,
-   central, configurada no n8n — o cliente não configura nada. */
+/* ---------- ENVIO (etapa 8) — demanda vai para o GRUPO VINCULADO ao usuário ----------
+   O usuário não escolhe grupo: o admin vincula um grupo ao acesso dele
+   (painel Gerenciar acessos), e o n8n usa esse vínculo do banco na hora
+   do envio — o que vem do navegador não decide o destino. */
 
 let logPollTimer = null;
 let logIdsVistos = new Set();
-let gruposDisponiveis = [];
 
 function renderLogRow(row){
   if(logIdsVistos.has(row.id)) return;
@@ -880,36 +901,22 @@ function iniciarAcompanhamentoLog(){
   setTimeout(()=>{ if(logPollTimer) clearInterval(logPollTimer); }, 10*60*1000);
 }
 
-async function carregarGrupos(){
-  const sel = document.getElementById('select-grupo');
-  sel.innerHTML = '<option value="">Carregando grupos...</option>';
-  const { data: { session } } = await supabase.auth.getSession();
-  if(!session) return;
-  try{
-    const resp = await fetch(N8N_WEBHOOK_LISTAR_GRUPOS, {
-      method:'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
-      body: JSON.stringify({})
-    });
-    if(!resp.ok) throw new Error('resposta ' + resp.status);
-    const grupos = await resp.json();
-    gruposDisponiveis = Array.isArray(grupos) ? grupos : (grupos.grupos || []);
-    if(!gruposDisponiveis.length){
-      sel.innerHTML = '<option value="">Nenhum grupo encontrado</option>';
-      return;
-    }
-    sel.innerHTML = '<option value="">Selecione o grupo...</option>' +
-      gruposDisponiveis.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.nome)}</option>`).join('');
-  }catch(e){
-    sel.innerHTML = '<option value="">Falha ao carregar — clique em ↻</option>';
+function mostrarGrupoVinculado(){
+  const el = document.getElementById('grupo-vinculado');
+  const hint = document.getElementById('grupo-vinculado-hint');
+  if(profile.grupo_id){
+    el.textContent = profile.grupo_nome || profile.grupo_id;
+    hint.textContent = '';
+    document.getElementById('btn-enviar-demanda').disabled = false;
+  } else {
+    el.textContent = 'Nenhum grupo vinculado';
+    hint.textContent = 'Peça ao administrador para vincular um grupo ao seu acesso.';
+    document.getElementById('btn-enviar-demanda').disabled = true;
   }
 }
-document.getElementById('btn-recarregar-grupos').onclick = carregarGrupos;
 
 async function garantirCampanha(){
   if(campaignAtualId) return campaignAtualId;
-  const sel = document.getElementById('select-grupo');
-  const grupoNome = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].text : '';
   const { data, error } = await supabase.from('campaigns').insert({
     user_id: currentUser.id,
     nome: 'Demanda ' + new Date().toLocaleDateString('pt-BR'),
@@ -920,8 +927,8 @@ async function garantirCampanha(){
     var4_cta: document.getElementById('input-var4').value,
     link_redirecionamento: document.getElementById('input-link').value,
     lista_id: listaAtualId,
-    grupo_id: sel.value,
-    grupo_nome: grupoNome
+    grupo_id: profile.grupo_id,
+    grupo_nome: profile.grupo_nome
   }).select().single();
   if(error){ toast('Erro ao salvar a demanda: ' + error.message); return null; }
   campaignAtualId = data.id;
@@ -929,25 +936,18 @@ async function garantirCampanha(){
 }
 
 document.getElementById('btn-enviar-demanda').onclick = async ()=>{
-  const grupoId = document.getElementById('select-grupo').value;
-  if(!grupoId){ toast('Selecione o grupo de WhatsApp'); return; }
+  if(!profile.grupo_id){ toast('Nenhum grupo vinculado ao seu acesso'); return; }
   if(!document.getElementById('input-var2').value){
     toast('Preencha a mensagem na etapa 4'); return;
   }
   const btn = document.getElementById('btn-enviar-demanda');
   btn.disabled = true; btn.textContent = 'Enviando...';
   try{
-    campaignAtualId = null; // cada envio de demanda gera um registro novo
+    campaignAtualId = null; // cada envio gera um registro novo
     const id = await garantirCampanha();
     if(!id) return;
     iniciarAcompanhamentoLog();
-    const { data: { session } } = await supabase.auth.getSession();
-    const resp = await fetch(N8N_WEBHOOK_ENVIAR_DEMANDA, {
-      method:'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
-      body: JSON.stringify({ campaign_id: id, grupo_id: grupoId })
-    });
-    if(!resp.ok){ toast('O n8n recusou a chamada (verifique a URL do webhook)'); return; }
+    await chamarN8n('enviar-demanda', { campaign_id: id });
     toast('Demanda enviada para o grupo — acompanhe o log abaixo');
   }catch(e){
     toast('Não foi possível enviar: ' + e.message);
@@ -957,19 +957,101 @@ document.getElementById('btn-enviar-demanda').onclick = async ()=>{
 };
 
 /* ---------- ADMIN: GERENCIAR ACESSOS ---------- */
+let gruposAdmin = [];
+
+async function carregarGruposAdmin(){
+  try{
+    const resp = await chamarN8n('listar-grupos', {});
+    gruposAdmin = Array.isArray(resp) ? resp : (resp && resp.grupos) || [];
+  }catch(e){
+    gruposAdmin = [];
+    toast('Não deu para listar os grupos: ' + e.message);
+  }
+}
+
+function opcoesGrupos(selecionado){
+  return '<option value="">— sem grupo —</option>' + gruposAdmin.map(g =>
+    `<option value="${escapeHtml(g.id)}" ${g.id === selecionado ? 'selected' : ''}>${escapeHtml(g.nome)}</option>`
+  ).join('');
+}
+
 async function carregarUsuariosAdmin(){
   const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending:false });
   if(error){ toast('Erro ao carregar usuários: ' + error.message); return; }
   const tbody = document.getElementById('admin-tabela-usuarios-body');
   tbody.innerHTML = (data||[]).map(u => `
-    <tr>
-      <td>${escapeHtml(u.nome || '—')}</td>
+    <tr data-uid="${u.id}">
+      <td>${escapeHtml(u.nome || '—')}${u.is_admin ? ' ★' : ''}</td>
       <td class="mono">${escapeHtml(u.email || '—')}</td>
       <td>${escapeHtml(u.ddd || '—')}</td>
-      <td>${u.is_admin ? '★ admin' : '—'}</td>
+      <td><select class="sel-grupo-usuario" style="width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;">${opcoesGrupos(u.grupo_id)}</select></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-vincular" style="padding:6px 10px;font-size:12px;">Salvar grupo</button>
+        ${u.id !== currentUser.id ? '<button class="btn btn-excluir" style="padding:6px 10px;font-size:12px;color:var(--red);border-color:var(--red);">Excluir</button>' : ''}
+      </td>
     </tr>
   `).join('');
+
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const uid = tr.dataset.uid;
+    const sel = tr.querySelector('.sel-grupo-usuario');
+
+    tr.querySelector('.btn-vincular').onclick = async ()=>{
+      const grupoId = sel.value;
+      const grupoNome = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].text : null;
+      const { error } = await supabase.from('profiles')
+        .update({ grupo_id: grupoId || null, grupo_nome: grupoNome })
+        .eq('id', uid);
+      if(error){ toast('Erro ao vincular: ' + error.message); return; }
+      toast(grupoId ? 'Grupo vinculado' : 'Vínculo removido');
+      if(uid === currentUser.id){ profile.grupo_id = grupoId || null; profile.grupo_nome = grupoNome; mostrarGrupoVinculado(); }
+    };
+
+    const btnExcluir = tr.querySelector('.btn-excluir');
+    if(btnExcluir) btnExcluir.onclick = async ()=>{
+      const email = tr.children[1].textContent;
+      if(!confirm(`Excluir o acesso de ${email}? Todos os dados dele (demandas, listas, logs) serão apagados. Essa ação não tem volta.`)) return;
+      btnExcluir.disabled = true; btnExcluir.textContent = 'Excluindo...';
+      try{
+        await chamarN8n('excluir-usuario', { user_id: uid });
+        toast('Usuário excluído');
+        tr.remove();
+      }catch(e){
+        toast('Erro ao excluir: ' + e.message);
+        btnExcluir.disabled = false; btnExcluir.textContent = 'Excluir';
+      }
+    };
+  });
 }
+
+document.getElementById('btn-verificar-conexao').onclick = async ()=>{
+  const statusEl = document.getElementById('evo-conexao-status');
+  const qrArea = document.getElementById('evo-qr-area');
+  const btn = document.getElementById('btn-verificar-conexao');
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  statusEl.textContent = 'Consultando a Evolution API...';
+  try{
+    const st = await chamarN8n('status-instancia', {});
+    if(st.conectado){
+      statusEl.innerHTML = '<span style="color:var(--jade-dark);font-weight:600;">● Conectado</span> — a instância está pronta para enviar.';
+      qrArea.style.display = 'none';
+      carregarGruposAdmin().then(carregarUsuariosAdmin);
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--amber);font-weight:600;">● ${escapeHtml(st.estado || 'desconectado')}</span>`;
+      if(st.qr){
+        document.getElementById('evo-qr-img').src = st.qr.startsWith('data:') ? st.qr : 'data:image/png;base64,' + st.qr;
+        qrArea.style.display = 'block';
+      } else {
+        qrArea.style.display = 'none';
+        statusEl.innerHTML += ' — sem QR disponível agora; clique de novo em alguns segundos.';
+      }
+    }
+  }catch(e){
+    statusEl.textContent = 'Falha ao verificar: ' + e.message;
+  }finally{
+    btn.disabled = false; btn.textContent = 'Verificar';
+  }
+};
 
 async function carregarAcessosAdmin(){
   const { data, error } = await supabase.from('acessos_log')
@@ -999,38 +1081,25 @@ document.getElementById('admin-criar-usuario').onclick = async ()=>{
   const email = document.getElementById('admin-email').value.trim();
   if(!email){ toast('Informe o e-mail do novo acesso'); return; }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if(!session){ toast('Sessão expirada, faça login novamente'); return; }
-
-  const payload = {
-    nome: document.getElementById('admin-nome').value.trim(),
-    email,
-    senha: document.getElementById('admin-senha').value.trim(),
-    ddd: document.getElementById('admin-ddd').value.trim()
-  };
-
   const btn = document.getElementById('admin-criar-usuario');
   btn.disabled = true; btn.textContent = 'Criando...';
+  const resultado = document.getElementById('admin-resultado');
   try{
-    const resp = await fetch(N8N_WEBHOOK_CRIAR_USUARIO, {
-      method:'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
-      body: JSON.stringify(payload)
+    const data = await chamarN8n('criar-usuario', {
+      nome: document.getElementById('admin-nome').value.trim(),
+      email,
+      senha: document.getElementById('admin-senha').value.trim(),
+      ddd: document.getElementById('admin-ddd').value.trim()
     });
-    const data = await resp.json();
-    const resultado = document.getElementById('admin-resultado');
     resultado.style.display = 'block';
-    if(!resp.ok){
-      resultado.style.color = 'var(--red)';
-      resultado.textContent = data.erro || 'Erro ao criar acesso.';
-    } else {
-      resultado.style.color = 'var(--jade-dark)';
-      resultado.textContent = `Acesso criado! E-mail: ${data.email} — Senha: ${data.senha_temporaria} (copie agora, não fica salva em nenhum lugar visível depois)`;
-      ['admin-nome','admin-email','admin-senha','admin-ddd'].forEach(id=>document.getElementById(id).value='');
-      carregarUsuariosAdmin();
-    }
+    resultado.style.color = 'var(--jade-dark)';
+    resultado.textContent = `Acesso criado! E-mail: ${data.email} — Senha: ${data.senha_temporaria} (copie agora, não fica salva em nenhum lugar visível depois)`;
+    ['admin-nome','admin-email','admin-senha','admin-ddd'].forEach(id=>document.getElementById(id).value='');
+    carregarUsuariosAdmin();
   }catch(e){
-    toast('Não foi possível chamar o webhook: ' + e.message);
+    resultado.style.display = 'block';
+    resultado.style.color = 'var(--red)';
+    resultado.textContent = 'Erro ao criar acesso: ' + e.message;
   }finally{
     btn.disabled = false; btn.textContent = 'Criar acesso';
   }
