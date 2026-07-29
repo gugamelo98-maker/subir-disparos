@@ -214,7 +214,6 @@
       </ul>
 
       <div class="rail-foot">
-        <div class="status-pill"><span class="status-dot" id="evo-status-dot"></span><span id="evo-status-text">Evolution API não configurada</span></div>
         <button class="btn-logout" id="btn-logout">Sair da conta</button>
       </div>
     </nav>
@@ -240,28 +239,19 @@
       <!-- STEP 2: DDD -->
       <section class="panel" data-panel="2">
         <div class="eyebrow">Etapa 2</div>
-        <h2>DDD</h2>
-        <p class="desc">Usado como padrão ao completar números sem código de área.</p>
+        <h2>Perfil e DDD</h2>
+        <p class="desc">O nome que aparece no perfil do WhatsApp e o DDD dos números.</p>
         <div class="card">
+          <div class="field-block">
+            <label>Nome do perfil</label>
+            <input type="text" id="input-nome-perfil" placeholder="ex: Loja da Maria">
+          </div>
           <div class="field-block">
             <label>DDD (ex: 48)</label>
             <input type="text" id="input-ddd" maxlength="2" placeholder="48">
           </div>
-          <div class="field-block">
-            <label>Nome da instância na Evolution API</label>
-            <input type="text" id="input-instance" placeholder="minha-instancia">
-          </div>
-          <div class="field-block">
-            <label>URL base da Evolution API</label>
-            <input type="text" id="input-evo-url" placeholder="https://sua-evolution.com">
-          </div>
-          <div class="field-block">
-            <label>API Key da instância</label>
-            <input type="text" id="input-evo-key" placeholder="apikey">
-          </div>
           <div class="btn-row">
-            <button class="btn btn-solid" id="save-ddd">Salvar configuração</button>
-            <button class="btn" id="test-evo">Testar conexão</button>
+            <button class="btn btn-solid" id="save-ddd">Salvar</button>
           </div>
         </div>
       </section>
@@ -376,12 +366,21 @@
       <!-- STEP 8: ENVIAR -->
       <section class="panel" data-panel="8">
         <div class="eyebrow">Etapa 8</div>
-        <h2>Enviar</h2>
-        <p class="desc">Envie primeiro para os números de teste antes de disparar para a lista inteira.</p>
+        <h2>Enviar para o grupo</h2>
+        <p class="desc">Escolha o seu grupo de WhatsApp — a demanda completa (perfil, DDD, mídia, mensagem, link, lista e números de teste) será enviada nele.</p>
         <div class="card">
+          <div class="field-block">
+            <label>Grupo de WhatsApp</label>
+            <div class="row">
+              <select id="select-grupo" style="flex:1;">
+                <option value="">Carregando grupos...</option>
+              </select>
+              <button class="btn" id="btn-recarregar-grupos" title="Recarregar grupos">↻</button>
+            </div>
+            <div class="hint">Não achou o grupo? O número conectado à Evolution API precisa estar dentro dele.</div>
+          </div>
           <div class="btn-row">
-            <button class="btn" id="btn-enviar-teste">Enviar para números de teste</button>
-            <button class="btn btn-solid" id="btn-enviar-lista">Disparar para a lista</button>
+            <button class="btn btn-solid" id="btn-enviar-demanda">Enviar demanda para o grupo</button>
           </div>
           <div class="log" id="envio-log"></div>
         </div>
@@ -415,20 +414,6 @@
               <input type="text" id="admin-ddd" maxlength="2" placeholder="48">
             </div>
           </div>
-          <div class="row">
-            <div class="field-block" style="flex:1;">
-              <label>Instância Evolution API</label>
-              <input type="text" id="admin-instance" placeholder="instancia-cliente">
-            </div>
-            <div class="field-block" style="flex:1;">
-              <label>URL da Evolution API</label>
-              <input type="text" id="admin-evo-url" placeholder="https://sua-evolution.com">
-            </div>
-          </div>
-          <div class="field-block">
-            <label>API Key da instância</label>
-            <input type="text" id="admin-evo-key" placeholder="apikey">
-          </div>
           <div class="btn-row">
             <button class="btn btn-solid" id="admin-criar-usuario">Criar acesso</button>
           </div>
@@ -438,7 +423,7 @@
         <div class="card">
           <h3 style="margin-top:0;font-size:15px;">Usuários com acesso</h3>
           <table class="contatos" id="admin-tabela-usuarios">
-            <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Instância</th><th>Admin</th></tr></thead>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>DDD</th><th>Admin</th></tr></thead>
             <tbody id="admin-tabela-usuarios-body"></tbody>
           </table>
         </div>
@@ -479,7 +464,8 @@ function bootApp(){
    ========================================================= */
 const SUPABASE_URL = "https://sfjxgbkvnjfvzbguwwhf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmanhnYmt2bmpmdnpiZ3V3d2hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5NjM3MzAsImV4cCI6MjA4NDUzOTczMH0.JtlgLxwYEkvIZEqGqDUOi3vng2HAf9M34XayW4w6orA";
-const N8N_WEBHOOK_URL = "https://SEU-N8N.dominio.com/webhook/disparo-whatsapp";
+const N8N_WEBHOOK_LISTAR_GRUPOS = "https://SEU-N8N.dominio.com/webhook/listar-grupos";
+const N8N_WEBHOOK_ENVIAR_DEMANDA = "https://SEU-N8N.dominio.com/webhook/enviar-demanda";
 const N8N_WEBHOOK_CRIAR_USUARIO = "https://SEU-N8N.dominio.com/webhook/criar-usuario";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -637,7 +623,7 @@ async function bootAfterLogin(novoLogin){
   if(novoLogin) await registrarAcesso();
   await carregarProfile();
   await carregarNumerosTeste();
-  atualizarStatusEvo();
+  carregarGrupos();
 }
 
 (async function initSession(){
@@ -664,10 +650,8 @@ async function carregarProfile(){
   const { data, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
   if(data){
     profile = data;
+    if(profile.nome) document.getElementById('input-nome-perfil').value = profile.nome;
     if(profile.ddd) document.getElementById('input-ddd').value = profile.ddd;
-    if(profile.evolution_instance) document.getElementById('input-instance').value = profile.evolution_instance;
-    if(profile.evolution_api_url) document.getElementById('input-evo-url').value = profile.evolution_api_url;
-    if(profile.evolution_api_key) document.getElementById('input-evo-key').value = profile.evolution_api_key;
     if(profile.foto_perfil_url){
       const img = document.getElementById('avatar-preview');
       img.src = profile.foto_perfil_url; img.style.display='block';
@@ -703,39 +687,15 @@ document.getElementById('save-avatar').onclick = async ()=>{
 };
 
 document.getElementById('save-ddd').onclick = async ()=>{
+  const nome = document.getElementById('input-nome-perfil').value.trim();
   const ddd = document.getElementById('input-ddd').value.trim();
-  const instance = document.getElementById('input-instance').value.trim();
-  const evoUrl = document.getElementById('input-evo-url').value.trim();
-  const evoKey = document.getElementById('input-evo-key').value.trim();
-  const { error } = await supabase.from('profiles').update({
-    ddd, evolution_instance: instance, evolution_api_url: evoUrl, evolution_api_key: evoKey
-  }).eq('id', currentUser.id);
+  if(!nome){ toast('Informe o nome do perfil'); return; }
+  if(!ddd){ toast('Informe o DDD'); return; }
+  const { error } = await supabase.from('profiles').update({ nome, ddd }).eq('id', currentUser.id);
   if(error){ toast('Erro ao salvar: ' + error.message); return; }
-  profile = { ...profile, ddd, evolution_instance: instance, evolution_api_url: evoUrl, evolution_api_key: evoKey };
-  toast('Configuração salva'); marcarEtapaConcluida(2);
-  atualizarStatusEvo();
+  profile = { ...profile, nome, ddd };
+  toast('Perfil salvo'); marcarEtapaConcluida(2);
 };
-
-document.getElementById('test-evo').onclick = async ()=>{
-  if(!profile.evolution_api_url || !profile.evolution_instance || !profile.evolution_api_key){
-    toast('Preencha e salve os dados da Evolution API primeiro'); return;
-  }
-  try{
-    const resp = await fetch(`${profile.evolution_api_url}/instance/connectionState/${profile.evolution_instance}`, {
-      headers: { apikey: profile.evolution_api_key }
-    });
-    if(resp.ok){ toast('Conexão OK com a Evolution API'); atualizarStatusEvo(true); }
-    else{ toast('Falha na conexão (verifique URL/instância/apikey)'); atualizarStatusEvo(false); }
-  }catch(e){ toast('Não foi possível conectar: ' + e.message); atualizarStatusEvo(false); }
-};
-
-function atualizarStatusEvo(ok){
-  const dot = document.getElementById('evo-status-dot');
-  const txt = document.getElementById('evo-status-text');
-  if(ok === true){ dot.classList.add('ok'); txt.textContent = 'Evolution API conectada'; }
-  else if(ok === false){ dot.classList.remove('ok'); txt.textContent = 'Falha ao conectar'; }
-  else if(profile.evolution_api_url && profile.evolution_instance){ txt.textContent = 'Configurada — teste a conexão'; }
-}
 
 /* ---------- MÍDIA (etapa 3) ---------- */
 document.getElementById('drop-midia').onclick = ()=>document.getElementById('input-midia').click();
@@ -835,8 +795,13 @@ document.getElementById('save-lista').onclick = async ()=>{
   if(!nome){ toast('Dê um nome para a lista'); return; }
   if(!contatosImportados.length){ toast('Importe um arquivo com contatos primeiro'); return; }
 
+  // sobe o arquivo original — ele vai anexado na demanda enviada ao grupo
+  const arquivo = document.getElementById('input-lista').files[0];
+  let arquivoUrl = null;
+  if(arquivo){ arquivoUrl = await uploadArquivo('arquivos', arquivo); }
+
   const { data: lista, error } = await supabase.from('listas')
-    .insert({ user_id: currentUser.id, nome, total_contatos: contatosImportados.length })
+    .insert({ user_id: currentUser.id, nome, arquivo_url: arquivoUrl, total_contatos: contatosImportados.length })
     .select().single();
   if(error){ toast('Erro ao salvar lista: ' + error.message); return; }
   listaAtualId = lista.id;
@@ -876,13 +841,15 @@ document.getElementById('add-teste-numero').onclick = async ()=>{
   marcarEtapaConcluida(7);
 };
 
-/* ---------- ENVIO (etapa 8) — dispara via webhook do n8n ----------
-   O n8n é quem chama a Evolution API de verdade: assim a apikey de
-   cada usuário nunca fica exposta no navegador, e o disparo continua
-   rodando no servidor mesmo se essa aba for fechada. */
+/* ---------- ENVIO (etapa 8) — envia a DEMANDA para o grupo de WhatsApp ----------
+   O site não dispara para lista de contatos. Ele empacota tudo que o cliente
+   preencheu (perfil, DDD, mídia, mensagem, link, lista, números de teste) e
+   envia para o GRUPO escolhido, via webhook do n8n. A Evolution API é uma só,
+   central, configurada no n8n — o cliente não configura nada. */
 
 let logPollTimer = null;
 let logIdsVistos = new Set();
+let gruposDisponiveis = [];
 
 function renderLogRow(row){
   if(logIdsVistos.has(row.id)) return;
@@ -905,72 +872,83 @@ function iniciarAcompanhamentoLog(){
       .order('created_at', { ascending:false }).limit(200);
     (data||[]).slice().reverse().forEach(renderLogRow);
   }, 3000);
-  // para de checar sozinho depois de 10 minutos, por segurança
   setTimeout(()=>{ if(logPollTimer) clearInterval(logPollTimer); }, 10*60*1000);
 }
 
-async function dispararViaN8n(modo){
+async function carregarGrupos(){
+  const sel = document.getElementById('select-grupo');
+  sel.innerHTML = '<option value="">Carregando grupos...</option>';
   const { data: { session } } = await supabase.auth.getSession();
-  if(!session){ toast('Sessão expirada, faça login novamente'); return false; }
+  if(!session) return;
   try{
-    const resp = await fetch(N8N_WEBHOOK_URL, {
+    const resp = await fetch(N8N_WEBHOOK_LISTAR_GRUPOS, {
       method:'POST',
       headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
-      body: JSON.stringify({ campaign_id: campaignAtualId, modo })
+      body: JSON.stringify({})
     });
-    if(!resp.ok){ toast('O n8n recusou a chamada (verifique a URL do webhook)'); return false; }
-    return true;
+    if(!resp.ok) throw new Error('resposta ' + resp.status);
+    const grupos = await resp.json();
+    gruposDisponiveis = Array.isArray(grupos) ? grupos : (grupos.grupos || []);
+    if(!gruposDisponiveis.length){
+      sel.innerHTML = '<option value="">Nenhum grupo encontrado</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Selecione o grupo...</option>' +
+      gruposDisponiveis.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.nome)}</option>`).join('');
   }catch(e){
-    toast('Não foi possível chamar o webhook do n8n: ' + e.message);
-    return false;
+    sel.innerHTML = '<option value="">Falha ao carregar — clique em ↻</option>';
   }
 }
+document.getElementById('btn-recarregar-grupos').onclick = carregarGrupos;
 
 async function garantirCampanha(){
   if(campaignAtualId) return campaignAtualId;
+  const sel = document.getElementById('select-grupo');
+  const grupoNome = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].text : '';
   const { data, error } = await supabase.from('campaigns').insert({
     user_id: currentUser.id,
-    nome: document.getElementById('input-lista-nome').value || 'Campanha sem nome',
+    nome: 'Demanda ' + new Date().toLocaleDateString('pt-BR'),
     midia_url: midiaAtual.url, midia_tipo: midiaAtual.tipo, midia_nome_arquivo: midiaAtual.nomeArquivo,
     var2_novidade: document.getElementById('input-var2').value,
     var3_texto: document.getElementById('input-var3').value,
     var4_cta: document.getElementById('input-var4').value,
     link_redirecionamento: document.getElementById('input-link').value,
-    lista_id: listaAtualId
+    lista_id: listaAtualId,
+    grupo_id: sel.value,
+    grupo_nome: grupoNome
   }).select().single();
-  if(error){ toast('Erro ao criar campanha: ' + error.message); return null; }
+  if(error){ toast('Erro ao salvar a demanda: ' + error.message); return null; }
   campaignAtualId = data.id;
   return campaignAtualId;
 }
 
-document.getElementById('btn-enviar-teste').onclick = async ()=>{
-  if(!validarAntesDeEnviar()) return;
-  if(!numerosTeste.length){ toast('Adicione ao menos um número de teste na etapa 7'); return; }
-  await garantirCampanha();
-  iniciarAcompanhamentoLog();
-  const ok = await dispararViaN8n('teste');
-  if(ok) toast('Envio de teste iniciado — acompanhe o log abaixo');
-};
-
-document.getElementById('btn-enviar-lista').onclick = async ()=>{
-  if(!validarAntesDeEnviar()) return;
-  if(!listaAtualId){ toast('Salve uma lista de contatos na etapa 6 primeiro'); return; }
-  if(!confirm('Confirma o disparo para toda a lista de contatos?')) return;
-  await garantirCampanha();
-  iniciarAcompanhamentoLog();
-  const ok = await dispararViaN8n('lista');
-  if(ok) toast('Disparo iniciado — acompanhe o log abaixo');
-};
-
-function validarAntesDeEnviar(){
-  if(!profile.evolution_api_url || !profile.evolution_instance || !profile.evolution_api_key){
-    toast('Configure a Evolution API na etapa 2'); return false;
-  }
+document.getElementById('btn-enviar-demanda').onclick = async ()=>{
+  const grupoId = document.getElementById('select-grupo').value;
+  if(!grupoId){ toast('Selecione o grupo de WhatsApp'); return; }
   if(!document.getElementById('input-var2').value){
-    toast('Preencha a mensagem na etapa 4'); return false;
+    toast('Preencha a mensagem na etapa 4'); return;
   }
-  return true;
-}
+  const btn = document.getElementById('btn-enviar-demanda');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try{
+    campaignAtualId = null; // cada envio de demanda gera um registro novo
+    const id = await garantirCampanha();
+    if(!id) return;
+    iniciarAcompanhamentoLog();
+    const { data: { session } } = await supabase.auth.getSession();
+    const resp = await fetch(N8N_WEBHOOK_ENVIAR_DEMANDA, {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ campaign_id: id, grupo_id: grupoId })
+    });
+    if(!resp.ok){ toast('O n8n recusou a chamada (verifique a URL do webhook)'); return; }
+    toast('Demanda enviada para o grupo — acompanhe o log abaixo');
+  }catch(e){
+    toast('Não foi possível enviar: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Enviar demanda para o grupo';
+  }
+};
 
 /* ---------- ADMIN: GERENCIAR ACESSOS ---------- */
 async function carregarUsuariosAdmin(){
@@ -982,7 +960,6 @@ async function carregarUsuariosAdmin(){
       <td>${escapeHtml(u.nome || '—')}</td>
       <td class="mono">${escapeHtml(u.email || '—')}</td>
       <td>${escapeHtml(u.ddd || '—')}</td>
-      <td>${escapeHtml(u.evolution_instance || '—')}</td>
       <td>${u.is_admin ? '★ admin' : '—'}</td>
     </tr>
   `).join('');
@@ -1023,10 +1000,7 @@ document.getElementById('admin-criar-usuario').onclick = async ()=>{
     nome: document.getElementById('admin-nome').value.trim(),
     email,
     senha: document.getElementById('admin-senha').value.trim(),
-    ddd: document.getElementById('admin-ddd').value.trim(),
-    evolution_instance: document.getElementById('admin-instance').value.trim(),
-    evolution_api_url: document.getElementById('admin-evo-url').value.trim(),
-    evolution_api_key: document.getElementById('admin-evo-key').value.trim()
+    ddd: document.getElementById('admin-ddd').value.trim()
   };
 
   const btn = document.getElementById('admin-criar-usuario');
@@ -1046,7 +1020,7 @@ document.getElementById('admin-criar-usuario').onclick = async ()=>{
     } else {
       resultado.style.color = 'var(--jade-dark)';
       resultado.textContent = `Acesso criado! E-mail: ${data.email} — Senha: ${data.senha_temporaria} (copie agora, não fica salva em nenhum lugar visível depois)`;
-      ['admin-nome','admin-email','admin-senha','admin-ddd','admin-instance','admin-evo-url','admin-evo-key'].forEach(id=>document.getElementById(id).value='');
+      ['admin-nome','admin-email','admin-senha','admin-ddd'].forEach(id=>document.getElementById(id).value='');
       carregarUsuariosAdmin();
     }
   }catch(e){
