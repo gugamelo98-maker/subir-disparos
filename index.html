@@ -200,7 +200,7 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
-      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 15</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 16</div>
 
       <ul class="steps" id="steps-nav">
         <li class="step active" data-step="nicho"><span class="dot">1</span>Nicho</li>
@@ -516,6 +516,12 @@
         <div class="eyebrow">Admin</div>
         <h2>Financeiro</h2>
         <p class="desc">Toda demanda enviada entra aqui com receita, custo e lucro. Pagamento sempre via PIX.</p>
+
+        <div class="card" style="display:flex;align-items:center;gap:12px;">
+          <label style="font-weight:600;font-size:13px;">Mês de referência</label>
+          <input type="month" id="fin-mes" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;">
+          <span class="hint" id="fin-mes-resumo" style="margin-left:auto;"></span>
+        </div>
 
         <div class="card">
           <div class="row" style="gap:20px;text-align:center;">
@@ -1483,10 +1489,25 @@ async function carregarFinanceiro(){
         style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;"></div>
     </div>`).join('');
 
-  // demandas enviadas (admin enxerga todas via RLS)
+  // mês de referência (default: mês atual) — filtra tudo abaixo
+  const inputMes = document.getElementById('fin-mes');
+  if(!inputMes.value){
+    const hoje = new Date();
+    inputMes.value = hoje.getFullYear() + '-' + String(hoje.getMonth()+1).padStart(2,'0');
+  }
+  const [ano, mes] = inputMes.value.split('-').map(Number);
+  const inicioMes = new Date(ano, mes-1, 1).toISOString();
+  const fimMes = new Date(ano, mes, 1).toISOString();
+  const nomeMes = new Date(ano, mes-1, 1).toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+
+  // demandas do mês (admin enxerga todas via RLS)
   const { data: demandas } = await supabase.from('campaigns')
     .select('*').eq('orcamento_aprovado', true)
-    .order('created_at', { ascending:false }).limit(200);
+    .gte('created_at', inicioMes).lt('created_at', fimMes)
+    .order('created_at', { ascending:false }).limit(500);
+
+  document.getElementById('fin-mes-resumo').textContent =
+    (demandas ? demandas.length : 0) + ' demanda(s) em ' + nomeMes;
 
   const porId = {};
   usuariosAdminCache.forEach(u => porId[u.id] = u.nome || u.email || u.id.slice(0,8));
@@ -1573,6 +1594,8 @@ async function carregarFinanceiro(){
   elLucro.style.color = lucroTotal >= 0 ? 'var(--jade-dark)' : 'var(--red)';
   document.getElementById('fin-margem').textContent = receitaTotal > 0 ? ((lucroTotal / receitaTotal) * 100).toFixed(1) + '%' : '—';
 }
+
+document.getElementById('fin-mes').addEventListener('change', carregarFinanceiro);
 
 document.getElementById('btn-salvar-custos').onclick = async ()=>{
   const linhas = [];
