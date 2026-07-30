@@ -200,7 +200,7 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
-      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 12</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 14</div>
 
       <ul class="steps" id="steps-nav">
         <li class="step active" data-step="nicho"><span class="dot">1</span>Nicho</li>
@@ -526,6 +526,17 @@
           </div>
         </div>
 
+        <div class="row">
+          <div class="card" style="flex:1;">
+            <h3 style="margin-top:0;font-size:15px;">🏆 Top 3 nichos (mais disparos)</h3>
+            <div id="fin-rank-nichos" class="hint">Sem demandas ainda.</div>
+          </div>
+          <div class="card" style="flex:1;">
+            <h3 style="margin-top:0;font-size:15px;">💚 Top 3 clientes (mais lucro)</h3>
+            <div id="fin-rank-clientes" class="hint">Sem demandas ainda.</div>
+          </div>
+        </div>
+
         <div class="card">
           <h3 style="margin-top:0;font-size:15px;">Custos por nicho (por contato)</h3>
           <div id="fin-custos-campos"></div>
@@ -537,7 +548,7 @@
         <div class="card">
           <h3 style="margin-top:0;font-size:15px;">Demandas enviadas</h3>
           <table class="contatos">
-            <thead><tr><th>Data</th><th>Cliente</th><th>Nicho</th><th>Contatos</th><th>Receita</th><th>Custo</th><th>Lucro</th><th>Pagamento</th></tr></thead>
+            <thead><tr><th>Data</th><th>Cliente</th><th>Nicho</th><th>Contatos</th><th>Receita</th><th>Custo</th><th>Lucro</th><th>Pagamento</th><th></th></tr></thead>
             <tbody id="fin-tabela-body"></tbody>
           </table>
         </div>
@@ -1481,6 +1492,7 @@ async function carregarFinanceiro(){
   usuariosAdminCache.forEach(u => porId[u.id] = u.nome || u.email || u.id.slice(0,8));
 
   let receitaTotal = 0, custoTotal = 0;
+  const porNicho = {}, porCliente = {};
   const tbody = document.getElementById('fin-tabela-body');
   tbody.innerHTML = (demandas||[]).map(d => {
     const contatos = d.total_contatos || 0;
@@ -1489,6 +1501,15 @@ async function carregarFinanceiro(){
     const custo = contatos * custoUnit;
     const lucro = receita - custo;
     receitaTotal += receita; custoTotal += custo;
+
+    if(d.nicho){
+      if(!porNicho[d.nicho]) porNicho[d.nicho] = { contatos: 0, lucro: 0 };
+      porNicho[d.nicho].contatos += contatos;
+      porNicho[d.nicho].lucro += lucro;
+    }
+    if(!porCliente[d.user_id]) porCliente[d.user_id] = { contatos: 0, lucro: 0 };
+    porCliente[d.user_id].contatos += contatos;
+    porCliente[d.user_id].lucro += lucro;
     return `<tr>
       <td>${new Date(d.created_at).toLocaleDateString('pt-BR')}</td>
       <td>${escapeHtml(porId[d.user_id] || d.user_id.slice(0,8))}</td>
@@ -1498,8 +1519,44 @@ async function carregarFinanceiro(){
       <td style="color:var(--amber);">${fmtReal(custo)}</td>
       <td style="font-weight:600;color:${lucro >= 0 ? 'var(--jade-dark)' : 'var(--red)'};">${fmtReal(lucro)}</td>
       <td><span class="chip" style="display:inline-flex;">PIX</span></td>
+      <td><button class="btn btn-excluir-demanda" data-id="${d.id}" style="padding:5px 9px;font-size:11.5px;color:var(--red);border-color:var(--red);">Excluir</button></td>
     </tr>`;
   }).join('');
+
+  tbody.querySelectorAll('.btn-excluir-demanda').forEach(btn => {
+    btn.onclick = async ()=>{
+      if(!confirm('Excluir esta demanda do financeiro? O registro e o log de envio dela serão apagados. (A mensagem já enviada no grupo não é afetada.)')) return;
+      btn.disabled = true; btn.textContent = '...';
+      const { error } = await supabase.from('campaigns').delete().eq('id', btn.dataset.id);
+      if(error){ toast('Erro ao excluir: ' + error.message); btn.disabled = false; btn.textContent = 'Excluir'; return; }
+      toast('Demanda excluída');
+      carregarFinanceiro();
+    };
+  });
+
+  // rankings
+  const medalhas = ['🥇','🥈','🥉'];
+  const rankNichos = Object.entries(porNicho)
+    .sort((a,b) => b[1].contatos - a[1].contatos).slice(0,3);
+  document.getElementById('fin-rank-nichos').innerHTML = rankNichos.length
+    ? rankNichos.map(([nicho, v], i) => `
+        <div class="row" style="align-items:center;padding:7px 0;border-bottom:1px solid #EEECE4;">
+          <div style="width:28px;font-size:17px;">${medalhas[i]}</div>
+          <div style="flex:1;text-transform:capitalize;font-weight:600;">${escapeHtml(nicho)}</div>
+          <div style="text-align:right;"><span class="mono">${v.contatos.toLocaleString('pt-BR')}</span> contatos<br><span class="hint">lucro ${fmtReal(v.lucro)}</span></div>
+        </div>`).join('')
+    : 'Sem demandas ainda.';
+
+  const rankClientes = Object.entries(porCliente)
+    .sort((a,b) => b[1].lucro - a[1].lucro).slice(0,3);
+  document.getElementById('fin-rank-clientes').innerHTML = rankClientes.length
+    ? rankClientes.map(([uid, v], i) => `
+        <div class="row" style="align-items:center;padding:7px 0;border-bottom:1px solid #EEECE4;">
+          <div style="width:28px;font-size:17px;">${medalhas[i]}</div>
+          <div style="flex:1;font-weight:600;">${escapeHtml(porId[uid] || uid.slice(0,8))}</div>
+          <div style="text-align:right;font-weight:700;color:${v.lucro >= 0 ? 'var(--jade-dark)' : 'var(--red)'};">${fmtReal(v.lucro)}<br><span class="hint" style="font-weight:400;">${v.contatos.toLocaleString('pt-BR')} contatos</span></div>
+        </div>`).join('')
+    : 'Sem demandas ainda.';
 
   const lucroTotal = receitaTotal - custoTotal;
   document.getElementById('fin-receita').textContent = fmtReal(receitaTotal);
