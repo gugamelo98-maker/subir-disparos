@@ -200,7 +200,7 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
-      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 14</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 15</div>
 
       <ul class="steps" id="steps-nav">
         <li class="step active" data-step="nicho"><span class="dot">1</span>Nicho</li>
@@ -1540,10 +1540,14 @@ async function carregarFinanceiro(){
     .sort((a,b) => b[1].contatos - a[1].contatos).slice(0,3);
   document.getElementById('fin-rank-nichos').innerHTML = rankNichos.length
     ? rankNichos.map(([nicho, v], i) => `
-        <div class="row" style="align-items:center;padding:7px 0;border-bottom:1px solid #EEECE4;">
-          <div style="width:28px;font-size:17px;">${medalhas[i]}</div>
-          <div style="flex:1;text-transform:capitalize;font-weight:600;">${escapeHtml(nicho)}</div>
-          <div style="text-align:right;"><span class="mono">${v.contatos.toLocaleString('pt-BR')}</span> contatos<br><span class="hint">lucro ${fmtReal(v.lucro)}</span></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #EEECE4;">
+          <span style="font-size:18px;">${medalhas[i]}</span>
+          <span style="flex:1;text-transform:capitalize;font-weight:600;font-size:14px;">${escapeHtml(nicho)}</span>
+          <span style="text-align:right;white-space:nowrap;">
+            <span style="font-weight:600;font-size:14px;">${v.contatos.toLocaleString('pt-BR')}</span>
+            <span class="hint"> disparos</span>
+            <span class="hint" style="display:block;font-size:11px;">lucro ${fmtReal(v.lucro)}</span>
+          </span>
         </div>`).join('')
     : 'Sem demandas ainda.';
 
@@ -1551,10 +1555,13 @@ async function carregarFinanceiro(){
     .sort((a,b) => b[1].lucro - a[1].lucro).slice(0,3);
   document.getElementById('fin-rank-clientes').innerHTML = rankClientes.length
     ? rankClientes.map(([uid, v], i) => `
-        <div class="row" style="align-items:center;padding:7px 0;border-bottom:1px solid #EEECE4;">
-          <div style="width:28px;font-size:17px;">${medalhas[i]}</div>
-          <div style="flex:1;font-weight:600;">${escapeHtml(porId[uid] || uid.slice(0,8))}</div>
-          <div style="text-align:right;font-weight:700;color:${v.lucro >= 0 ? 'var(--jade-dark)' : 'var(--red)'};">${fmtReal(v.lucro)}<br><span class="hint" style="font-weight:400;">${v.contatos.toLocaleString('pt-BR')} contatos</span></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #EEECE4;">
+          <span style="font-size:18px;">${medalhas[i]}</span>
+          <span style="flex:1;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(porId[uid] || uid.slice(0,8))}</span>
+          <span style="text-align:right;white-space:nowrap;">
+            <span style="font-weight:700;font-size:14px;color:${v.lucro >= 0 ? 'var(--jade-dark)' : 'var(--red)'};">${fmtReal(v.lucro)}</span>
+            <span class="hint" style="display:block;font-size:11px;">${v.contatos.toLocaleString('pt-BR')} disparos</span>
+          </span>
         </div>`).join('')
     : 'Sem demandas ainda.';
 
