@@ -200,7 +200,7 @@
     <nav class="rail">
       <div class="rail-brand">Disparos<span>.</span></div>
       <div class="rail-user" id="rail-user-email">—</div>
-      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 16</div>
+      <div class="rail-user" style="margin-top:-24px;font-size:10.5px;opacity:.6;">versão 17</div>
 
       <ul class="steps" id="steps-nav">
         <li class="step active" data-step="nicho"><span class="dot">1</span>Nicho</li>
@@ -404,6 +404,13 @@
           <div class="field-block">
             <label>Orçamento</label>
             <div id="orcamento-envio" class="template-preview" style="padding:12px 16px;">Suba a lista de contatos e selecione o nicho para calcular.</div>
+            <div id="credito-area" style="display:none;margin-top:10px;padding:10px 14px;background:#EEFAF5;border:1px solid #C9EEDD;border-radius:8px;">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+                <input type="checkbox" id="check-usar-credito" style="width:16px;height:16px;">
+                <span>Usar meu crédito de <b id="credito-saldo-txt">R$ 0,00</b></span>
+              </label>
+              <div class="hint" id="credito-resultado" style="margin-top:6px;"></div>
+            </div>
             <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400;cursor:pointer;">
               <input type="checkbox" id="check-aprovar-orcamento" style="width:16px;height:16px;">
               Aprovo o orçamento acima
@@ -552,9 +559,15 @@
         </div>
 
         <div class="card">
+          <h3 style="margin-top:0;font-size:15px;">💳 Créditos dos clientes</h3>
+          <p class="hint" style="margin-top:-4px;">Sobra de disparos não entregues (enviados − entregues) × preço do cliente. O cliente aplica no próximo orçamento.</p>
+          <div id="fin-creditos-clientes" class="hint">Nenhum crédito em aberto.</div>
+        </div>
+
+        <div class="card">
           <h3 style="margin-top:0;font-size:15px;">Demandas enviadas</h3>
           <table class="contatos">
-            <thead><tr><th>Data</th><th>Cliente</th><th>Nicho</th><th>Contatos</th><th>Receita</th><th>Custo</th><th>Lucro</th><th>Pagamento</th><th></th></tr></thead>
+            <thead><tr><th>Data</th><th>Cliente</th><th>Nicho</th><th>Enviados</th><th>Entregues</th><th>Receita</th><th>Custo</th><th>Lucro</th><th>Pgto</th><th></th></tr></thead>
             <tbody id="fin-tabela-body"></tbody>
           </table>
         </div>
@@ -597,6 +610,7 @@ let listaAtualId = null;
 let numerosTeste = [];
 let campaignAtualId = null;
 let nichoAtual = '';
+let saldoCredito = 0;
 let precosCliente = {};   // { nicho: preco_por_contato }
 const NICHOS = ['corban & cobrança','rifa','ob','bet','politica'];
 
@@ -839,6 +853,7 @@ async function bootAfterLogin(novoLogin){
   await carregarProfile();
   await carregarPrecosCliente();
   await carregarNumerosTeste();
+  await carregarSaldoCredito();
   restaurarRascunho();
   mostrarGrupoVinculado();
   calcularOrcamento();
@@ -1067,6 +1082,34 @@ document.getElementById('add-teste-numero').onclick = async ()=>{
 };
 
 
+
+async function carregarSaldoCredito(){
+  const { data } = await supabase.from('creditos').select('valor').eq('user_id', currentUser.id);
+  saldoCredito = (data||[]).reduce((s, c) => s + parseFloat(c.valor), 0);
+  if(saldoCredito < 0.005) saldoCredito = 0;
+  const area = document.getElementById('credito-area');
+  area.style.display = saldoCredito > 0 ? 'block' : 'none';
+  document.getElementById('credito-saldo-txt').textContent = fmtReal(saldoCredito);
+  atualizarCreditoResultado();
+}
+
+function creditoAplicado(){
+  const total = (precoDoNicho() || 0) * contatosImportados.length;
+  if(!document.getElementById('check-usar-credito').checked) return 0;
+  return Math.min(saldoCredito, total);
+}
+
+function atualizarCreditoResultado(){
+  const el = document.getElementById('credito-resultado');
+  const total = (precoDoNicho() || 0) * contatosImportados.length;
+  const usado = creditoAplicado();
+  if(!document.getElementById('check-usar-credito').checked || !total){ el.textContent = ''; return; }
+  const aPagar = total - usado;
+  const sobra = saldoCredito - usado;
+  el.textContent = `Crédito aplicado: ${fmtReal(usado)} — a pagar via PIX: ${fmtReal(aPagar)}` +
+    (sobra > 0 ? ` (sobram ${fmtReal(sobra)} de crédito)` : '');
+}
+
 /* ---------- NICHO E ORÇAMENTO ---------- */
 async function carregarPrecosCliente(){
   const { data } = await supabase.from('precos_nicho').select('*').eq('user_id', currentUser.id);
@@ -1113,6 +1156,8 @@ function calcularOrcamento(){
   boxLista.textContent = texto;
   boxEnvio.textContent = texto;
 }
+
+document.getElementById('check-usar-credito').addEventListener('change', atualizarCreditoResultado);
 
 document.getElementById('select-nicho').addEventListener('change', ()=>{
   nichoAtual = document.getElementById('select-nicho').value;
@@ -1196,6 +1241,7 @@ async function garantirCampanha(){
     total_contatos: contatosImportados.length,
     preco_unitario: precoDoNicho() || 0,
     valor_total: (precoDoNicho() || 0) * contatosImportados.length,
+    credito_usado: creditoAplicado(),
     orcamento_aprovado: true
   }).select().single();
   if(error){ toast('Erro ao salvar a demanda: ' + error.message); return null; }
@@ -1239,6 +1285,7 @@ async function novaDemanda(){
   document.getElementById('select-nicho').value = '';
   document.getElementById('nicho-preco-hint').textContent = '';
   document.getElementById('check-aprovar-orcamento').checked = false;
+  document.getElementById('check-usar-credito').checked = false;
   document.getElementById('orcamento-lista').style.display = 'none';
   document.getElementById('orcamento-envio').textContent = 'Suba a lista de contatos e selecione o nicho para calcular.';
 
@@ -1285,6 +1332,7 @@ async function novaDemanda(){
     if(el) el.classList.remove('done');
   });
 
+  await carregarSaldoCredito();
   irParaEtapa('nicho');
 }
 
@@ -1315,9 +1363,11 @@ document.getElementById('btn-enviar-demanda').onclick = async ()=>{
   (listaAtualId ? vai : falta).push('lista de contatos');
   (numerosTeste.length ? vai : falta).push('números de teste');
   const valorTotal = (precoDoNicho() || 0) * contatosImportados.length;
+  const credUsado = creditoAplicado();
   let msg = 'A demanda vai para: ' + (profile.grupo_nome || profile.grupo_id)
     + '\nNicho: ' + nichoAtual
     + '\nOrçamento APROVADO: ' + contatosImportados.length + ' contatos × ' + fmtReal(precoDoNicho() || 0) + ' = ' + fmtReal(valorTotal)
+    + (credUsado > 0 ? '\nCrédito usado: ' + fmtReal(credUsado) + ' — a pagar via PIX: ' + fmtReal(valorTotal - credUsado) : '')
     + '\n\n✔ Incluído: ' + (vai.join(', ') || 'nada');
   if(falta.length) msg += '\n\n✖ FALTANDO: ' + falta.join(', ') + '\n\nEnviar mesmo assim?';
   else msg += '\n\nEnviar?';
@@ -1329,6 +1379,13 @@ document.getElementById('btn-enviar-demanda').onclick = async ()=>{
     campaignAtualId = null; // cada envio gera um registro novo
     const id = await garantirCampanha();
     if(!id) return;
+    const usado = creditoAplicado();
+    if(usado > 0){
+      await supabase.from('creditos').insert({
+        user_id: currentUser.id, campaign_id: id, tipo: 'uso',
+        valor: -usado, descricao: 'Aplicado no orçamento'
+      });
+    }
     await chamarN8n('enviar-demanda', { campaign_id: id });
     // o n8n confirma o recebimento na hora e envia ao grupo em segundo plano
     await novaDemanda();
@@ -1516,10 +1573,13 @@ async function carregarFinanceiro(){
   const porNicho = {}, porCliente = {};
   const tbody = document.getElementById('fin-tabela-body');
   tbody.innerHTML = (demandas||[]).map(d => {
-    const contatos = d.total_contatos || 0;
-    const receita = parseFloat(d.valor_total || 0);
+    const enviados = d.total_contatos || 0;
+    // financeiro conta pelo ENTREGUE quando o admin já informou; senão, pelo enviado
+    const base = (d.entregues !== null && d.entregues !== undefined) ? d.entregues : enviados;
+    const contatos = base;
+    const receita = base * parseFloat(d.preco_unitario || 0);
     const custoUnit = custosNicho[d.nicho] !== undefined ? custosNicho[d.nicho] : 0;
-    const custo = contatos * custoUnit;
+    const custo = base * custoUnit;
     const lucro = receita - custo;
     receitaTotal += receita; custoTotal += custo;
 
@@ -1535,7 +1595,13 @@ async function carregarFinanceiro(){
       <td>${new Date(d.created_at).toLocaleDateString('pt-BR')}</td>
       <td>${escapeHtml(porId[d.user_id] || d.user_id.slice(0,8))}</td>
       <td>${escapeHtml(d.nicho || '—')}</td>
-      <td>${contatos}</td>
+      <td>${enviados.toLocaleString('pt-BR')}</td>
+      <td style="white-space:nowrap;">
+        <input type="number" min="0" max="${enviados}" class="input-entregues" data-id="${d.id}" data-user="${d.user_id}" data-enviados="${enviados}" data-preco="${d.preco_unitario || 0}"
+          value="${d.entregues !== null && d.entregues !== undefined ? d.entregues : ''}" placeholder="—"
+          style="width:78px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;">
+        <button class="btn btn-salvar-entregues" data-id="${d.id}" style="padding:5px 8px;font-size:11px;">✓</button>
+      </td>
       <td style="color:var(--jade-dark);">${fmtReal(receita)}</td>
       <td style="color:var(--amber);">${fmtReal(custo)}</td>
       <td style="font-weight:600;color:${lucro >= 0 ? 'var(--jade-dark)' : 'var(--red)'};">${fmtReal(lucro)}</td>
@@ -1543,6 +1609,34 @@ async function carregarFinanceiro(){
       <td><button class="btn btn-excluir-demanda" data-id="${d.id}" style="padding:5px 9px;font-size:11.5px;color:var(--red);border-color:var(--red);">Excluir</button></td>
     </tr>`;
   }).join('');
+
+  tbody.querySelectorAll('.btn-salvar-entregues').forEach(btn => {
+    btn.onclick = async ()=>{
+      const inp = tbody.querySelector(`.input-entregues[data-id="${btn.dataset.id}"]`);
+      const entregues = parseInt(inp.value);
+      const enviados = parseInt(inp.dataset.enviados);
+      const preco = parseFloat(inp.dataset.preco);
+      if(isNaN(entregues) || entregues < 0 || entregues > enviados){
+        toast('Informe um número entre 0 e ' + enviados); return;
+      }
+      btn.disabled = true;
+      // salva o entregue na demanda
+      const { error } = await supabase.from('campaigns').update({ entregues }).eq('id', btn.dataset.id);
+      if(error){ toast('Erro ao salvar: ' + error.message); btn.disabled = false; return; }
+      // refaz o crédito da sobra (apaga o anterior desta demanda e cria o novo)
+      await supabase.from('creditos').delete().eq('campaign_id', btn.dataset.id).eq('tipo', 'sobra');
+      const sobra = enviados - entregues;
+      const credito = sobra * preco;
+      if(credito > 0){
+        await supabase.from('creditos').insert({
+          user_id: inp.dataset.user, campaign_id: btn.dataset.id, tipo: 'sobra',
+          valor: credito, descricao: `Sobra de ${sobra} disparos não entregues`
+        });
+      }
+      toast(credito > 0 ? `Entregues salvos — ${fmtReal(credito)} de crédito gerado para o cliente` : 'Entregues salvos');
+      carregarFinanceiro();
+    };
+  });
 
   tbody.querySelectorAll('.btn-excluir-demanda').forEach(btn => {
     btn.onclick = async ()=>{
@@ -1554,6 +1648,19 @@ async function carregarFinanceiro(){
       carregarFinanceiro();
     };
   });
+
+  // saldos de crédito (todos os lançamentos, todos os clientes — admin via RLS)
+  const { data: lancamentos } = await supabase.from('creditos').select('user_id,valor');
+  const saldos = {};
+  (lancamentos||[]).forEach(l => { saldos[l.user_id] = (saldos[l.user_id] || 0) + parseFloat(l.valor); });
+  const comSaldo = Object.entries(saldos).filter(([,v]) => v > 0.005);
+  document.getElementById('fin-creditos-clientes').innerHTML = comSaldo.length
+    ? comSaldo.sort((a,b) => b[1]-a[1]).map(([uid, v]) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #EEECE4;">
+          <span style="flex:1;font-weight:600;font-size:13px;">${escapeHtml(porId[uid] || uid.slice(0,8))}</span>
+          <span style="font-weight:700;color:var(--jade-dark);">${fmtReal(v)}</span>
+        </div>`).join('')
+    : 'Nenhum crédito em aberto.';
 
   // rankings
   const medalhas = ['🥇','🥈','🥉'];
